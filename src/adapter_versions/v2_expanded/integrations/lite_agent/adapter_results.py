@@ -3263,6 +3263,13 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
                 "workspace; do not assume this inspection wrote anything."
             )
         }
+    if domain == "libreoffice_writer" and action == "document.create":
+        return {key: result.get(key) for key in (
+            "created", "blank", "activates_document", "identity", "path", "exists", "valid",
+        )} | {"guidance": (
+            "This is a new empty saved document, now active. Reuse its returned identity "
+            "for separate text/table edits. Creating it alone does not copy source content."
+        )}
     if domain == "libreoffice_writer" and action in {"document.export_pdf", "document.export_file_pdf"}:
         return {
             key: result[key]

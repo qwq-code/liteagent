@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 from openai import OpenAI
 
 from .tool_catalog import tool_name
+from .atomic_tool_surface import atomic_provider_surface, restore_adapter_arguments
 from .reasoning import (
     SUPPORTED_REASONING_EFFORTS,
     SUPPORTED_REASONING_MODES,
@@ -111,14 +112,34 @@ def _provider_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     untyped object that asks the model to guess its arguments.
     """
     def normalize(value: Any) -> Any:
-        if isinstance(value, list):
-            return [normalize(item) for item in value]
         if not isinstance(value, dict):
-            return value
-        result = {
-            key: normalize(item) for key, item in value.items()
-            if key != "x-route"
-        }
+            return copy.deepcopy(value)
+        # Only schema positions contain keywords. A property called "const"
+        # or a literal JSON object in an enum/default is application data.
+        result = copy.deepcopy(value)
+        result.pop("x-route", None)
+        for key in ("properties", "patternProperties", "$defs", "definitions", "dependentSchemas"):
+            mapping = result.get(key)
+            if isinstance(mapping, dict):
+                result[key] = {name: normalize(child) for name, child in mapping.items()}
+        for key in ("items", "additionalItems", "additionalProperties", "contains",
+                    "propertyNames", "not", "if", "then", "else",
+                    "unevaluatedItems", "unevaluatedProperties"):
+            child = result.get(key)
+            if isinstance(child, dict):
+                result[key] = normalize(child)
+            elif key == "items" and isinstance(child, list):
+                result[key] = [normalize(item) for item in child]
+        for key in ("allOf", "anyOf", "oneOf", "prefixItems"):
+            children = result.get(key)
+            if isinstance(children, list):
+                result[key] = [normalize(child) for child in children]
+        dependencies = result.get("dependencies")
+        if isinstance(dependencies, dict):
+            result["dependencies"] = {
+                key: normalize(child) if isinstance(child, dict) else child
+                for key, child in dependencies.items()
+            }
         types = result.get("type")
         if isinstance(types, list) and all(isinstance(item, str) for item in types):
             result.pop("type")
@@ -684,15 +705,16 @@ class StructuredToolModelClient:
         # route. Pin only that unambiguous route at the provider boundary;
         # the model still supplies the route arguments and terminal controls
         # remain available on surfaces with more than one executable choice.
+        provider_surface, atomic_bindings = atomic_provider_surface(tools)
         exposed_function_names = [
             tool.get("function", {}).get("name")
-            for tool in tools
+            for tool in provider_surface
             if isinstance(tool.get("function"), dict)
         ]
         adapter_function_names = [
             name
             for name in exposed_function_names
-            if isinstance(name, str) and name.startswith("adapter__")
+            if isinstance(name, str) and name.startswith(("adapter__", "atomic__"))
         ]
         force_single_adapter = (
             len(adapter_function_names) == 1
@@ -704,10 +726,30 @@ class StructuredToolModelClient:
                 "type": "function",
                 "function": {"name": "adapter_call" if adapter_function_names[0] == "adapter__adapter_call" else adapter_function_names[0]},
             }
+        provider_messages = messages
+        if atomic_bindings:
+            guidance = (
+                "For this turn, each atomic__ tool is one discovered adapter operation. "
+                "Use its current schema: action parameters go at the top level, with optional "
+                "request_options for document, target, verify or timeout_ms. Historical "
+                "adapter.call/payload.params examples use the internal logging format. "
+                "Choose one current tool and do not chain operations."
+            )
+            # Qwen's chat template permits system instructions only at the
+            # beginning. Do not append a second system turn after observations.
+            provider_messages = copy.deepcopy(messages)
+            if provider_messages and provider_messages[0].get("role") == "system":
+                content = provider_messages[0].get("content", "")
+                if isinstance(content, list):
+                    provider_messages[0]["content"] = [*content, {"type": "text", "text": guidance}]
+                else:
+                    provider_messages[0]["content"] = str(content) + "\n\n" + guidance
+            else:
+                provider_messages.insert(0, {"role": "system", "content": guidance})
         request = {
             "model": model,
-            "messages": messages,
-            "tools": _provider_tools(tools),
+            "messages": provider_messages,
+            "tools": _provider_tools(provider_surface),
             "tool_choice": tool_choice,
             "parallel_tool_calls": False,
             "temperature": temperature,
@@ -832,6 +874,25 @@ class StructuredToolModelClient:
                     response_snapshot=self._response_snapshot(response, choice, message),
                     tool_name=tool,
                 )
+        provider_tool = tool
+        provider_arguments_raw = arguments_raw
+        if tool in atomic_bindings:
+            binding = atomic_bindings[tool]
+            atomic_schema = binding["schema"]
+            arguments = _normalize_boolean_literals(arguments, atomic_schema)
+            errors = list(Draft202012Validator(atomic_schema).iter_errors(arguments))
+            if errors:
+                actionable_errors = _actionable_validation_errors(errors)
+                raise StructuredToolProtocolError(
+                    "tool arguments do not satisfy the exposed schema",
+                    response_snapshot=self._response_snapshot(response, choice, message),
+                    tool_name=tool,
+                    missing_fields=_safe_missing_fields(actionable_errors),
+                    schema_hints=_schema_validation_hints(actionable_errors, instance=arguments),
+                )
+            arguments = restore_adapter_arguments(arguments, binding)
+            arguments_raw = json.dumps(arguments, ensure_ascii=False)
+            tool = "adapter__adapter_call"
         if tool == "adapter_call":
             tool = "adapter__adapter_call"
 
@@ -896,6 +957,8 @@ class StructuredToolModelClient:
             "id": call_id if textual_call is not None else call.id,
             "tool": tool,
             "arguments_raw": arguments_raw,
+            "provider_tool": provider_tool,
+            "provider_arguments_raw": provider_arguments_raw,
             "model_actual": response.model,
             "usage": response.usage.model_dump(mode="json") if response.usage else None,
             "finish_reason": finish_reason,

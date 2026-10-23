@@ -64,6 +64,7 @@ WRITER_IMAGE_SUFFIXES = (
 
 ACTIONS = frozenset(
     {
+        "document.create",
         "document.inspect",
         "document.read_file",
         "document.extract_images",
@@ -639,7 +640,13 @@ def _validate_paragraph_format_fields(data: Mapping[str, Any], prefix: str) -> N
 
 
 def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
-    if action == "document.inspect":
+    if action == "document.create":
+        if set(params) - {"path"}:
+            raise AdapterError("INVALID_REQUEST", "document.create accepts only params.path")
+        path = _local_path(_string(params, "path"), "params.path")
+        if not path.lower().endswith((".docx", ".odt")):
+            raise AdapterError("INVALID_REQUEST", "params.path must end in .docx or .odt")
+    elif action == "document.inspect":
         if "paragraph_start" in params:
             _nonnegative_int(params, "paragraph_start")
         if "paragraph_limit" in params:

@@ -1,0 +1,324 @@
+[
+  {
+    "order": 95,
+    "mode": "wrapper",
+    "request_file": "/home/pengzhe/liteagent-repair-full189-r16-20261023T0820/src/adapter_versions/v2_expanded/experiments/work/liteagent-repair-full189-r16-20261023T0820/workers/worker-11/raw/run-1/95-multi_apps-b5062e3e-641c-4e3a-907b-ac864d2e7652/llm_requests/request_0002_step_002_attempt_1.json",
+    "request_sha256": "43a0eecb39f4599a2063cc6183b82904b18605e43a0abb30d18f807afd713864",
+    "endpoint": "http://127.0.0.1:18035/v1",
+    "model": "Qwen3.5-9B",
+    "output_token_budget": 512,
+    "tools_executed": false,
+    "schema_valid": true,
+    "finish_reason": "tool_calls",
+    "provider_tool": "adapter_call",
+    "arguments": {
+      "adapter": "os",
+      "action": "image.extract_text_batch",
+      "payload": {
+        "params": {
+          "input_pattern": "*.pdf",
+          "cwd_source": "explicit",
+          "cwd_path": "/home/user/Documents/Papers",
+          "max_files": 4,
+          "max_pages_per_pdf": 8,
+          "include_hidden": false
+        },
+        "timeout_ms": 300000
+      }
+    },
+    "usage": {
+      "completion_tokens": 81,
+      "prompt_tokens": 3989,
+      "total_tokens": 4070,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": null
+    },
+    "seconds": 7.946
+  },
+  {
+    "order": 95,
+    "mode": "atomic",
+    "request_file": "/home/pengzhe/liteagent-repair-full189-r16-20261023T0820/src/adapter_versions/v2_expanded/experiments/work/liteagent-repair-full189-r16-20261023T0820/workers/worker-11/raw/run-1/95-multi_apps-b5062e3e-641c-4e3a-907b-ac864d2e7652/llm_requests/request_0002_step_002_attempt_1.json",
+    "request_sha256": "43a0eecb39f4599a2063cc6183b82904b18605e43a0abb30d18f807afd713864",
+    "endpoint": "http://127.0.0.1:18035/v1",
+    "model": "Qwen3.5-9B",
+    "output_token_budget": 512,
+    "tools_executed": false,
+    "schema_valid": true,
+    "finish_reason": "tool_calls",
+    "provider_tool": "atomic__os_image_extract_text_batch_3e05b8d7",
+    "arguments": {
+      "adapter": "os",
+      "action": "image.extract_text_batch",
+      "payload": {
+        "timeout_ms": 300000,
+        "params": {
+          "input_pattern": "*.pdf",
+          "cwd_source": "explicit",
+          "cwd_path": "/home/user/Documents/Papers",
+          "max_files": 4,
+          "max_pages_per_pdf": 8
+        }
+      }
+    },
+    "usage": {
+      "completion_tokens": 58,
+      "prompt_tokens": 4002,
+      "total_tokens": 4060,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": null
+    },
+    "seconds": 5.812
+  },
+  {
+    "order": 99,
+    "mode": "atomic",
+    "request_file": "/home/pengzhe/liteagent-repair-full189-r16-20261023T0820/src/adapter_versions/v2_expanded/experiments/work/liteagent-repair-full189-r16-20261023T0820/workers/worker-03/raw/run-1/99-multi_apps-337d318b-aa07-4f4f-b763-89d9a2dd013f/llm_requests/request_0004_step_004_attempt_1.json",
+    "request_sha256": "b84bf9100e93cf021b5c85a57ad02a4b165043c4ffa11be117d4f2f78f144818",
+    "endpoint": "http://127.0.0.1:18035/v1",
+    "model": "Qwen3.5-9B",
+    "output_token_budget": 512,
+    "tools_executed": false,
+    "schema_valid": true,
+    "finish_reason": "tool_calls",
+    "provider_tool": "atomic__os_image_extract_text_batch_3e05b8d7",
+    "arguments": {
+      "adapter": "os",
+      "action": "image.extract_text_batch",
+      "payload": {
+        "timeout_ms": 300000,
+        "params": {
+          "input_pattern": "*.pdf",
+          "cwd_source": "explicit",
+          "cwd_path": "/home/user/Desktop",
+          "max_files": 4,
+          "max_pages_per_pdf": 8
+        }
+      }
+    },
+    "usage": {
+      "completion_tokens": 56,
+      "prompt_tokens": 4789,
+      "total_tokens": 4845,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": null
+    },
+    "seconds": 5.89
+  },
+  {
+    "order": 99,
+    "mode": "wrapper",
+    "request_file": "/home/pengzhe/liteagent-repair-full189-r16-20261023T0820/src/adapter_versions/v2_expanded/experiments/work/liteagent-repair-full189-r16-20261023T0820/workers/worker-03/raw/run-1/99-multi_apps-337d318b-aa07-4f4f-b763-89d9a2dd013f/llm_requests/request_0004_step_004_attempt_1.json",
+    "request_sha256": "b84bf9100e93cf021b5c85a57ad02a4b165043c4ffa11be117d4f2f78f144818",
+    "endpoint": "http://127.0.0.1:18035/v1",
+    "model": "Qwen3.5-9B",
+    "output_token_budget": 512,
+    "tools_executed": false,
+    "schema_valid": true,
+    "finish_reason": "tool_calls",
+    "provider_tool": "adapter_call",
+    "arguments": {
+      "adapter": "os",
+      "action": "image.extract_text_batch",
+      "payload": {
+        "params": {
+          "input_pattern": "Bank-Statement.pdf",
+          "cwd_source": "explicit",
+          "cwd_path": "/home/user/Desktop",
+          "max_chars_per_file": 20000,
+          "max_pages_per_pdf": 20,
+          "include_hidden": false
+        }
+      }
+    },
+    "usage": {
+      "completion_tokens": 77,
+      "prompt_tokens": 4776,
+      "total_tokens": 4853,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": null
+    },
+    "seconds": 7.41
+  },
+  {
+    "order": 107,
+    "mode": "wrapper",
+    "request_file": "/home/pengzhe/liteagent-repair-full189-r16-20261023T0820/src/adapter_versions/v2_expanded/experiments/work/liteagent-repair-full189-r16-20261023T0820/workers/worker-11/raw/run-1/107-multi_apps-881deb30-9549-4583-a841-8270c65f2a17/llm_requests/request_0002_step_002_attempt_1.json",
+    "request_sha256": "44dc10ac12e7cd10aa8eb96cca20f75adb6e059967e7b7d474ef8a9ea9d2c351",
+    "endpoint": "http://127.0.0.1:18035/v1",
+    "model": "Qwen3.5-9B",
+    "output_token_budget": 512,
+    "tools_executed": false,
+    "schema_valid": true,
+    "finish_reason": "tool_calls",
+    "provider_tool": "adapter_call",
+    "arguments": {
+      "adapter": "os",
+      "action": "image.extract_text_batch",
+      "payload": {
+        "params": {
+          "input_pattern": "ecs*.pdf",
+          "cwd_source": "explicit",
+          "cwd_path": "/home/user/Documents/Fundings/ecs",
+          "max_files": 9,
+          "max_pages_per_pdf": 20,
+          "include_hidden": false
+        }
+      }
+    },
+    "usage": {
+      "completion_tokens": 75,
+      "prompt_tokens": 4124,
+      "total_tokens": 4199,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": null
+    },
+    "seconds": 6.848
+  },
+  {
+    "order": 107,
+    "mode": "atomic",
+    "request_file": "/home/pengzhe/liteagent-repair-full189-r16-20261023T0820/src/adapter_versions/v2_expanded/experiments/work/liteagent-repair-full189-r16-20261023T0820/workers/worker-11/raw/run-1/107-multi_apps-881deb30-9549-4583-a841-8270c65f2a17/llm_requests/request_0002_step_002_attempt_1.json",
+    "request_sha256": "44dc10ac12e7cd10aa8eb96cca20f75adb6e059967e7b7d474ef8a9ea9d2c351",
+    "endpoint": "http://127.0.0.1:18035/v1",
+    "model": "Qwen3.5-9B",
+    "output_token_budget": 512,
+    "tools_executed": false,
+    "schema_valid": true,
+    "finish_reason": "tool_calls",
+    "provider_tool": "atomic__os_image_extract_text_batch_3e05b8d7",
+    "arguments": {
+      "adapter": "os",
+      "action": "image.extract_text_batch",
+      "payload": {
+        "timeout_ms": 300000,
+        "params": {
+          "input_pattern": "ecs*.pdf",
+          "cwd_source": "explicit",
+          "cwd_path": "/home/user/Documents/Fundings/ecs",
+          "max_files": 9,
+          "max_pages_per_pdf": 20
+        }
+      }
+    },
+    "usage": {
+      "completion_tokens": 64,
+      "prompt_tokens": 4137,
+      "total_tokens": 4201,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": null
+    },
+    "seconds": 6.177
+  },
+  {
+    "order": 122,
+    "mode": "atomic",
+    "request_file": "/home/pengzhe/liteagent-repair-full189-r16-20261023T0820/src/adapter_versions/v2_expanded/experiments/work/liteagent-repair-full189-r16-20261023T0820/workers/worker-02/raw/run-1/122-multi_apps-415ef462-bed3-493a-ac36-ca8c6d23bf1b/llm_requests/request_0012_step_012_attempt_1.json",
+    "request_sha256": "2814739ca6efa1816e94fa7aeb4219496f9e1252ab5a2370333a823624dd76bc",
+    "endpoint": "http://127.0.0.1:18035/v1",
+    "model": "Qwen3.5-9B",
+    "output_token_budget": 512,
+    "tools_executed": false,
+    "schema_valid": true,
+    "finish_reason": "tool_calls",
+    "provider_tool": "atomic__os_image_extract_text_batch_3e05b8d7",
+    "arguments": {
+      "adapter": "os",
+      "action": "image.extract_text_batch",
+      "payload": {
+        "timeout_ms": 300000,
+        "params": {
+          "input_pattern": "invoice0123456789.pdf",
+          "cwd_source": "explicit",
+          "cwd_path": "/home/user/my receipts",
+          "max_chars_per_file": 20000,
+          "max_files": 1
+        }
+      }
+    },
+    "usage": {
+      "completion_tokens": 72,
+      "prompt_tokens": 6377,
+      "total_tokens": 6449,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": null
+    },
+    "seconds": 6.9
+  },
+  {
+    "order": 122,
+    "mode": "wrapper",
+    "request_file": "/home/pengzhe/liteagent-repair-full189-r16-20261023T0820/src/adapter_versions/v2_expanded/experiments/work/liteagent-repair-full189-r16-20261023T0820/workers/worker-02/raw/run-1/122-multi_apps-415ef462-bed3-493a-ac36-ca8c6d23bf1b/llm_requests/request_0012_step_012_attempt_1.json",
+    "request_sha256": "2814739ca6efa1816e94fa7aeb4219496f9e1252ab5a2370333a823624dd76bc",
+    "endpoint": "http://127.0.0.1:18035/v1",
+    "model": "Qwen3.5-9B",
+    "output_token_budget": 512,
+    "tools_executed": false,
+    "schema_valid": true,
+    "finish_reason": "tool_calls",
+    "provider_tool": "adapter_call",
+    "arguments": {
+      "adapter": "os",
+      "action": "image.extract_text_batch",
+      "payload": {
+        "params": {
+          "input_pattern": "invoice0123456789.pdf",
+          "cwd_source": "explicit",
+          "cwd_path": "/home/user/my receipts",
+          "max_chars_per_file": 20000,
+          "max_pages_per_pdf": 20,
+          "include_hidden": false
+        },
+        "timeout_ms": 300000
+      }
+    },
+    "usage": {
+      "completion_tokens": 98,
+      "prompt_tokens": 6364,
+      "total_tokens": 6462,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": null
+    },
+    "seconds": 9.252
+  }
+]

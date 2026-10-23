@@ -378,6 +378,11 @@ DOMAIN_SIGNATURES = {
         ),
     },
     "gimp": {
+        "image.export": (
+            'params={"input_path": saved image filesystem path, "output_path": separate image path, '
+            '"loader"?: "auto"|"jpeg", "quality"?: number[0,1]}; the output extension selects '
+            "PNG, JPEG or XCF; target.path and file_type are not source/output parameters"
+        ),
         "image.adjust": (
             'params={"input_path": str, "output_path": str, '
             '"brightness"?: number[-127,127], "contrast"?: number[-127,127], '

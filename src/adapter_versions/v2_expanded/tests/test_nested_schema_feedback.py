@@ -218,7 +218,9 @@ def test_forwarded_schema_feedback_reaches_retry_with_full_schema(case) -> None:
     assert "private-synthetic-label" not in requests[1]["messages"][0]["content"]
     assert requests[1]["messages"][1]["content"].endswith(state.instruction)
     from integrations.lite_agent.model_client import _provider_tools
-    assert requests[0]["tools"] == requests[1]["tools"] == _provider_tools(original_tools)
+    from integrations.lite_agent.atomic_tool_surface import atomic_provider_surface
+    provider_surface, _ = atomic_provider_surface(original_tools)
+    assert requests[0]["tools"] == requests[1]["tools"] == _provider_tools(provider_surface)
     assert proposal["structured_call_validated"] is True
     assert proposal["arguments_raw"] == raw_calls[1]
     assert json.loads(proposal["arguments_raw"]) == corrected

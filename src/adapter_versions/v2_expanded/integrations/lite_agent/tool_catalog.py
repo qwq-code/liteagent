@@ -533,6 +533,9 @@ ACTION_KEYWORDS = {
         "top",
         "trim",
     },
+    ("libreoffice_writer", "document.create"): {
+        "create", "new", "blank", "empty", "writer", "document", "docx", "odt",
+    },
     ("libreoffice_writer", "document.export_file_pdf"): {
         "convert", "doc", "docx", "document", "export", "file", "odt",
         "pdf", "saved", "source", "writer",

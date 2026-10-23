@@ -176,6 +176,8 @@ def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
     if action == "image.inspect":
         _string(params, "path")
     elif action == "image.export":
+        if set(params) - {"input_path", "output_path", "quality", "loader"}:
+            raise AdapterError("INVALID_REQUEST", "image.export received unsupported parameters")
         _string(params, "input_path")
         _string(params, "output_path")
         if "quality" in params:

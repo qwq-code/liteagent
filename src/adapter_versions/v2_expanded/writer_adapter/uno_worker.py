@@ -1912,6 +1912,43 @@ def _inspect(session: WriterSession, params: dict[str, Any]) -> dict[str, Any]:
     } | page
 
 
+def _create_blank_document(session: WriterSession, params: dict[str, Any]) -> dict[str, Any]:
+    raw_path = params["path"]
+    path = _url_path(raw_path) if raw_path.startswith("file://") else Path(raw_path).expanduser()
+    if path is None or not path.is_absolute() or path.suffix.lower() not in {".odt", ".docx"}:
+        raise AdapterError("INVALID_REQUEST", "new Writer path must be an absolute .docx or .odt path")
+    if path.exists() or path.is_symlink():
+        raise AdapterError("DESTINATION_EXISTS", "new document path already exists", {"path": str(path)}, 409)
+    if not path.parent.is_dir():
+        raise AdapterError("PATH_NOT_FOUND", "new document parent directory does not exist", {"path": str(path.parent)}, 404)
+    previous = session.desktop.getCurrentComponent()
+    document = session.desktop.loadComponentFromURL("private:factory/swriter", "_blank", 0, ())
+    try:
+        if document is None or not document.supportsService("com.sun.star.text.TextDocument"):
+            raise AdapterError("DOCUMENT_CREATE_FAILED", "LibreOffice did not create a Writer document")
+        filter_name = "writer8" if path.suffix.lower() == ".odt" else "Office Open XML Text"
+        document.storeAsURL(_file_url(str(path)), (
+            _property("FilterName", filter_name), _property("Overwrite", False),
+        ))
+        document.getCurrentController().getFrame().activate()
+        session.doc = document
+        saved = session.save()
+        return {"created": True, "blank": document.Text.String == "",
+                "activates_document": session.desktop.getCurrentComponent() == document,
+                "identity": session.identity(), **saved}
+    except Exception as exc:
+        if document is not None:
+            _close_component(document)
+        try:
+            if previous is not None:
+                previous.getCurrentController().getFrame().activate()
+        except Exception:
+            pass
+        if isinstance(exc, AdapterError):
+            raise
+        raise AdapterError("DOCUMENT_CREATE_FAILED", "failed to create blank Writer document", str(exc), 500) from exc
+
+
 def _save_action(session: WriterSession, params: dict[str, Any]) -> dict[str, Any]:
     target = params.get("url")
     if target:
@@ -2937,6 +2974,11 @@ def _implicit_action_verification(
     session: WriterSession,
     result: dict[str, Any],
 ) -> dict[str, Any]:
+    if action == "document.create":
+        expected = {"created": True, "blank": True, "activates_document": True,
+                    "exists": True, "valid": True}
+        passed = all(result.get(key) == value for key, value in expected.items())
+        return _verification(passed, [{"type": "new_blank_document", "passed": passed}], result, expected)
     if action == "settings.set_default_font":
         return _verify_requested(
             session, [{"type": "default_font", "expected": result["font_name"]}]
@@ -2962,6 +3004,13 @@ def _implicit_action_verification(
 
 def execute(payload: dict[str, Any]) -> dict[str, Any]:
     action = payload.get("action")
+    if action == "document.create":
+        session = WriterSession({}, allow_no_document=True)
+        result = _create_blank_document(session, payload.get("params") or {})
+        checks = payload.get("verify") or []
+        verification = (_verify_requested(session, checks) if checks else
+                        _implicit_action_verification(action, session, result))
+        return {"result": result, "verification": verification, "logs": []}
     if action == "document.export_file_pdf":
         session = WriterSession({}, allow_no_document=True)
         result = _export_file_pdf(session, payload.get("params") or {})

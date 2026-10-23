@@ -142,6 +142,18 @@ def rgb_color_schema(description: str) -> dict[str, Any]:
 # Model-visible parameter contracts owned by the Adapter. Raw document indices stay
 # zero-based; natural paragraph and delimited-column ordinals are explicitly one-based.
 STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
+    "document.create": {
+        "description": (
+            "Create and activate one empty Writer document at a new .docx or .odt path. "
+            "The parent directory must exist; existing files are rejected. This creates "
+            "no text or tables. Use separate append/format operations after creation. "
+            "The returned identity identifies the new saved document for later edits."
+        ),
+        "properties": {
+            "path": {"type": "string", "pattern": r"^(?:/|~/|file://(?:localhost)?/).+\.(?:[dD][oO][cC][xX]|[oO][dD][tT])$"},
+        },
+        "required": ["path"],
+    },
     "document.inspect": {
         "description": (
             "Read the current Writer structure, including the exact table names returned "

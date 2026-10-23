@@ -4,6 +4,25 @@ from typing import Any
 
 
 STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
+    "image.export": {
+        "description": (
+            "Export a saved source image or XCF project to a separate image file. "
+            "Supply both input_path and output_path inside params; target.path does "
+            "not select the source. The output suffix chooses PNG, JPEG or XCF; "
+            "there is no file_type field. Use exact filesystem paths, not ~/ or file URLs. "
+            "This reads the saved input and does not export an unsaved GUI buffer. "
+            "Existing output artifacts are replaced; the input must be different."
+        ),
+        "properties": {
+            "input_path": {"type": "string", "minLength": 1, "pattern": r"\S"},
+            "output_path": {"type": "string", "minLength": 1, "pattern": r"\S"},
+            "loader": {"type": "string", "enum": ["auto", "jpeg"],
+                       "description": "Defaults to auto; jpeg explicitly forces the JPEG loader."},
+            "quality": {"type": "number", "minimum": 0, "maximum": 1,
+                        "description": "JPEG quality from 0 to 1, default 0.98; not a percentage."},
+        },
+        "required": ["input_path", "output_path"],
+    },
     "image.inspect": {
         "properties": {
             "path": {
