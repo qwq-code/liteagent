@@ -1,0 +1,42 @@
+approval_policy = "never"
+sandbox_mode = "read-only"
+web_search = "disabled"
+project_doc_max_bytes = 0
+include_environment_context = false
+include_permissions_instructions = false
+include_apps_instructions = false
+include_collaboration_mode_instructions = false
+check_for_update_on_startup = false
+
+[analytics]
+enabled = false
+
+[history]
+persistence = "none"
+
+[skills]
+include_instructions = false
+
+[tools.update_plan]
+enabled = false
+
+[tools.experimental_request_user_input]
+enabled = false
+
+[features]
+shell_tool = false
+unified_exec = false
+view_image = false
+multi_agent = false
+multi_agent_v2 = false
+code_mode = false
+code_mode_only = false
+apps = false
+plugins = false
+hooks = false
+tool_suggest = false
+image_generation = false
+token_budget = false
+current_time_reminder = false
+deferred_executor = false
+request_permissions_tool = false

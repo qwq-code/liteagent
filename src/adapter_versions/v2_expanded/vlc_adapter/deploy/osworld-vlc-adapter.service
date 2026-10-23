@@ -1,0 +1,21 @@
+[Unit]
+Description=OSWorld VLC Adapter
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/osworld-vlc-adapter
+Environment=PYTHONPATH=%h/.local/share/osworld-vlc-adapter/python-deps:%h/.local/share/osworld-vlc-adapter
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=OSWORLD_VLC_PASSWORD=password
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+ExecStart=/usr/bin/python3 -m vlc_adapter.service
+Restart=on-failure
+RestartSec=1
+KillMode=control-group
+TimeoutStopSec=5
+
+[Install]
+WantedBy=default.target

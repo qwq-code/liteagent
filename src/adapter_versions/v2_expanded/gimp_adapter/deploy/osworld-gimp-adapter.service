@@ -1,0 +1,19 @@
+[Unit]
+Description=OSWorld GIMP Adapter
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/osworld-gimp-adapter
+Environment=PYTHONPATH=%h/.local/share/osworld-gimp-adapter
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/usr/bin/python3 -m gimp_adapter.service
+Restart=on-failure
+RestartSec=1
+KillMode=control-group
+TimeoutStopSec=5
+
+[Install]
+WantedBy=default.target

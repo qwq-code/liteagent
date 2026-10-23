@@ -1,0 +1,21 @@
+{
+  "version": "osworld-api-v2-expanded",
+  "role": "validated_expansion",
+  "created_at": "2026-08-01T01:21:24+00:00",
+  "osworld_commit": "091f5ef1d5544bc74953c77875d5feb5bed30108",
+  "third_party_link": "../../third_party",
+  "parent": "../v1_baseline",
+  "status": "complete",
+  "baseline_manifest": "../v1_baseline/SHA256SUMS",
+  "completed_at": "2026-08-01T02:30:54+00:00",
+  "public_actions": 162,
+  "proven_actions": 89,
+  "new_actions": [
+    "os.command.run",
+    "libreoffice_impress.shape.write_text_native"
+  ],
+  "comparison": "experiments/v1-v2-comparison.json",
+  "latest_agent_regression": "experiments/api-optimization-chrome-gimp-regression-results.json",
+  "stage_report": "v2-expansion-stage-report.md",
+  "acceptance": "v2-expansion-acceptance-results.json"
+}

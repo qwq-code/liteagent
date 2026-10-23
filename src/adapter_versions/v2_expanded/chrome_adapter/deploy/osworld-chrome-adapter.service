@@ -1,0 +1,20 @@
+[Unit]
+Description=OSWorld Chrome Adapter
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/osworld-chrome-adapter
+Environment=PYTHONPATH=%h/.local/share/osworld-chrome-adapter
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/usr/bin/python3 -m chrome_adapter.service
+Restart=on-failure
+RestartSec=1
+KillMode=process
+TimeoutStopSec=5
+
+[Install]
+WantedBy=default.target
+

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+journalctl --user -u osworld-thunderbird-adapter.service -n "${1:-200}" --no-pager

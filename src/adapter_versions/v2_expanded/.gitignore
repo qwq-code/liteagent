@@ -1,0 +1,26 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local secrets and logs
+.env
+.env.*
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Local OSWorld checkout and VM images
+/third_party/OSWorld/
+/third_party/OpenAPA/

@@ -1,0 +1,242 @@
+[
+  {
+    "domain": "os",
+    "id": "a4d98375-215b-4a4d-aee9-3d4370fccc41"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "aad10cd7-9337-4b62-b704-a857848cedf2"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "7f35355e-02a6-45b5-b140-f0be698bcf85"
+  },
+  {
+    "domain": "os",
+    "id": "37887e8c-da15-4192-923c-08fa390a176d"
+  },
+  {
+    "domain": "os",
+    "id": "a462a795-fdc7-4b23-b689-e8b6df786b78"
+  },
+  {
+    "domain": "libreoffice_calc",
+    "id": "ecb0df7a-4e8d-4a03-b162-053391d3afaf"
+  },
+  {
+    "domain": "chrome",
+    "id": "af630914-714e-4a24-a7bb-f9af687d3b91"
+  },
+  {
+    "domain": "thunderbird",
+    "id": "a10b69e1-6034-4a2b-93e1-571d45194f75"
+  },
+  {
+    "domain": "thunderbird",
+    "id": "9bc3cc16-074a-45ac-9bdc-b2a362e1daf3"
+  },
+  {
+    "domain": "libreoffice_impress",
+    "id": "edb61b14-a854-4bf5-a075-c8075c11293a"
+  },
+  {
+    "domain": "libreoffice_impress",
+    "id": "ac1b39ff-ee4d-4483-abce-c117e98942f0"
+  },
+  {
+    "domain": "libreoffice_calc",
+    "id": "7a4e4bc8-922c-4c84-865c-25ba34136be1"
+  },
+  {
+    "domain": "gimp",
+    "id": "7a4deb26-d57d-4ea9-9a73-630f66a7b568"
+  },
+  {
+    "domain": "gimp",
+    "id": "5ca86c6f-f317-49d8-b6a7-b527541caae8"
+  },
+  {
+    "domain": "libreoffice_calc",
+    "id": "2bd59342-0664-4ccb-ba87-79379096cc08"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "51f5801c-18b3-4f25-b0c3-02f85507a078"
+  },
+  {
+    "domain": "vs_code",
+    "id": "982d12a5-beab-424f-8d38-d2a48429e511"
+  },
+  {
+    "domain": "vlc",
+    "id": "8f080098-ddb1-424c-b438-4e96e5e4786e"
+  },
+  {
+    "domain": "libreoffice_calc",
+    "id": "1d17d234-e39d-4ed7-b46f-4417922a4e7c"
+  },
+  {
+    "domain": "libreoffice_impress",
+    "id": "4ed5abd0-8b5d-47bd-839f-cacfa15ca37a"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "acb0f96b-e27c-44d8-b55f-7cb76609dfcd"
+  },
+  {
+    "domain": "libreoffice_impress",
+    "id": "358aa0a7-6677-453f-ae35-e440f004c31e"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "0e5303d4-8820-42f6-b18d-daf7e633de21"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "46407397-a7d5-4c6b-92c6-dbe038b1457b"
+  },
+  {
+    "domain": "libreoffice_calc",
+    "id": "535364ea-05bd-46ea-9937-9f55c68507e8"
+  },
+  {
+    "domain": "os",
+    "id": "fe41f596-a71b-4c2f-9b2f-9dcd40b568c3"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "185f29bd-5da0-40a6-b69c-ba7f4e0324ef"
+  },
+  {
+    "domain": "libreoffice_writer",
+    "id": "6f81754e-285d-4ce0-b59e-af7edb02d108"
+  },
+  {
+    "domain": "vlc",
+    "id": "9195653c-f4aa-453d-aa95-787f6ccfaae9"
+  },
+  {
+    "domain": "libreoffice_calc",
+    "id": "f9584479-3d0d-4c79-affa-9ad7afdd8850"
+  },
+  {
+    "domain": "chrome",
+    "id": "3720f614-37fd-4d04-8a6b-76f54f8c222d"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "f918266a-b3e0-4914-865d-4faa564f1aef"
+  },
+  {
+    "domain": "thunderbird",
+    "id": "dfac9ee8-9bc4-4cdc-b465-4a4bfcd2f397"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "2fe4b718-3bd7-46ec-bdce-b184f5653624"
+  },
+  {
+    "domain": "libreoffice_calc",
+    "id": "01b269ae-2111-4a07-81fd-3fcd711993b0"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "a82b78bb-7fde-4cb3-94a4-035baf10bcf0"
+  },
+  {
+    "domain": "gimp",
+    "id": "8ea73f6f-9689-42ad-8c60-195bbf06a7ba"
+  },
+  {
+    "domain": "libreoffice_impress",
+    "id": "57667013-ea97-417c-9dce-2713091e6e2a"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "a503b07f-9119-456b-b75d-f5146737d24f"
+  },
+  {
+    "domain": "os",
+    "id": "3ce045a0-877b-42aa-8d2c-b4a863336ab8"
+  },
+  {
+    "domain": "libreoffice_impress",
+    "id": "2b94c692-6abb-48ae-ab0b-b3e8a19cb340"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "873cafdd-a581-47f6-8b33-b9696ddb7b05"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "20236825-b5df-46e7-89bf-62e1d640a897"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "aceb0368-56b8-4073-b70e-3dc9aee184e0"
+  },
+  {
+    "domain": "vlc",
+    "id": "cb130f0d-d36f-4302-9838-b3baf46139b6"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "8df7e444-8e06-4f93-8a1a-c5c974269d82"
+  },
+  {
+    "domain": "libreoffice_impress",
+    "id": "455d3c66-7dc6-4537-a39a-36d3e9119df7"
+  },
+  {
+    "domain": "libreoffice_calc",
+    "id": "abed40dc-063f-4598-8ba5-9fe749c0615d"
+  },
+  {
+    "domain": "vs_code",
+    "id": "0512bb38-d531-4acf-9e7e-0add90816068"
+  },
+  {
+    "domain": "gimp",
+    "id": "734d6579-c07d-47a8-9ae2-13339795476b"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "c2751594-0cd5-4088-be1b-b5f2f9ec97c4"
+  },
+  {
+    "domain": "thunderbird",
+    "id": "d38192b0-17dc-4e1d-99c3-786d0117de77"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "937087b6-f668-4ba6-9110-60682ee33441"
+  },
+  {
+    "domain": "chrome",
+    "id": "82279c77-8fc6-46f6-9622-3ba96f61b477"
+  },
+  {
+    "domain": "thunderbird",
+    "id": "7b1e1ff9-bb85-49be-b01d-d6424be18cd0"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "415ef462-bed3-493a-ac36-ca8c6d23bf1b"
+  },
+  {
+    "domain": "chrome",
+    "id": "da46d875-6b82-4681-9284-653b0c7ae241"
+  },
+  {
+    "domain": "multi_apps",
+    "id": "7e287123-70ca-47b9-8521-47db09b69b14"
+  },
+  {
+    "domain": "chrome",
+    "id": "b070486d-e161-459b-aa2b-ef442d973b92"
+  },
+  {
+    "domain": "os",
+    "id": "5c1075ca-bb34-46a3-a7a0-029bd7463e79"
+  }
+]

@@ -1,0 +1,17 @@
+[Unit]
+Description=OSWorld Multi-Apps Adapter
+After=graphical-session.target network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/osworld-multi-apps-adapter
+Environment=PYTHONPATH=%h/.local/share/osworld-multi-apps-adapter
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+Environment=MULTI_APPS_ADAPTER_PORT=8774
+ExecStart=/usr/bin/python3 -m multi_apps_adapter.service
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
