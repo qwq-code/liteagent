@@ -68,6 +68,11 @@ def _route_payload_schema(
     payload = copy.deepcopy(base_payload_schema)
     properties = payload.setdefault("properties", {})
     properties["params"] = _downstream_params_schema(adapter, action)
+    if (adapter, action) == ("os", "command.run"):
+        properties["target"] = {
+            "type": "object", "properties": {}, "additionalProperties": False,
+            "description": "Unused for command.run. Put stdout_path in payload.params alongside argv.",
+        }
     # Zero-argument inspection actions are commonly emitted as payload={};
     # preserve that valid native shape instead of forcing an empty params object.
     payload["required"] = [] if action in {"workbook.inspect", "workbook.save"} else ["params"]

@@ -152,7 +152,7 @@ def strict_completion_gate(
     ):
         missing = completion_claim_contract_errors(completion)
         missing.extend(completion_claim_contradictions(completion))
-        missing.extend(issue["message"] for issue in outcome_issues)
+        missing.extend(issue["message"] for issue in outcome_issues if not issue.get("advisory"))
         return {
             "passed": not missing,
             "missing": missing,
@@ -193,7 +193,7 @@ def strict_completion_gate(
             )
     if semantic_requirement_errors is not None:
         missing.extend(semantic_requirement_errors(state))
-    missing.extend(issue["message"] for issue in outcome_issues)
+    missing.extend(issue["message"] for issue in outcome_issues if not issue.get("advisory"))
     return {"passed": not missing, "missing": list(dict.fromkeys(missing)),
             **({"outcome_issues": outcome_issues} if outcome_issues else {})}
 

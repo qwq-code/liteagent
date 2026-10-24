@@ -114,7 +114,9 @@ def _used_rectangle(sheet: dict) -> Any:
     return None
 
 def completion_outcome_issues(state: Any) -> list[dict[str, Any]]:
+    from .batch_progress import batch_coverage_issues
+    issues = batch_coverage_issues(state)
     if state.domain != "libreoffice_calc":
-        return []
+        return issues
     from .calc_scaled_outcomes import scaled_display_issues
-    return scaled_display_issues(state)
+    return issues + scaled_display_issues(state)

@@ -940,6 +940,9 @@ def completion_claim_contradictions(
             r"(?i)\b(?:I|we|the\s+user)\s+(?:still\s+)?(?:need|needs|will\s+need|would\s+need)\s+to\b",
             r"(?i)\b(?:should|must|need(?:s)?\s+to)\s+(?:now\s+)?(?:execute|run|click|open|set|change|save|verify)\b",
             r"(?i)\b(?:ready|prepared)\s+(?:for|to)\s+(?:command\s+input|execute|run|perform)\b",
+            r"(?i)\b(?:the\s+)?user\s+can\s+(?:now\s+)?(?:proceed\s+to|continue\s+to|finish|complete)\b",
+            r"(?is)\bremaining\s+[^.!?]{0,100}\b(?:can|could|should|must)\s+be\s+"
+            r"(?:extracted|processed|created|saved|edited|converted|copied|completed)\b",
         ),
         "the completion claim says no required action was taken": (
             r"(?i)\bno\s+action\s+has\s+been\s+taken\b",

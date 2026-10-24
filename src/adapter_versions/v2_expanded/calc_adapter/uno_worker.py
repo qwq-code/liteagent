@@ -2483,6 +2483,20 @@ def _apply_number_format(
     locale = _locale(locale_value)
     key = formats.queryKey(format_code, locale, True)
     if key == -1:
+        # UNO's lookup is case-sensitive, while addNew parses date/time tokens
+        # case-insensitively and rejects a duplicate built-in format. Preserve
+        # quoted, escaped, fill and bracket literals when finding that existing
+        # native format; never uppercase a displayed unit or currency label.
+        canonical = re.sub(
+            r'"[^"]*"|\\.|_.|\*.|\[[^\]]*\]|[A-Za-z]+',
+            lambda match: match[0].upper()
+            if re.fullmatch(r"[ymdhs]+", match[0], re.IGNORECASE)
+            else match[0],
+            format_code,
+        )
+        if canonical != format_code:
+            key = formats.queryKey(canonical, locale, True)
+    if key == -1:
         key = formats.addNew(format_code, locale)
     target.NumberFormat = key
     return int(key)

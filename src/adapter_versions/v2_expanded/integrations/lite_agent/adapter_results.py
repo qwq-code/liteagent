@@ -2801,6 +2801,35 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
                     "truncated, range.read can inspect a smaller explicit area."
                 ) + bounded_readback_guidance,
             }
+    if domain == "libreoffice_calc" and action == "range.write":
+        hint = adapter_context_hint(domain, "range.read", body)
+        if isinstance(hint, dict):
+            hint["written_cells"] = result.get("written_cells")
+            literal_formulas = []
+            for row_index, row in enumerate(result.get("values", [])):
+                if not isinstance(row, list):
+                    continue
+                for column_index, value in enumerate(row):
+                    if not isinstance(value, str) or not value.startswith("="):
+                        continue
+                    kinds = result.get("kinds", [])
+                    if row_index < len(kinds) and column_index < len(kinds[row_index]) and kinds[row_index][column_index] == "string":
+                        addresses = hint.get("cell_addresses", [])
+                        literal_formulas.append(addresses[row_index][column_index]
+                            if row_index < len(addresses) and column_index < len(addresses[row_index])
+                            else [row_index, column_index])
+            if literal_formulas:
+                hint["literal_formula_cells"] = literal_formulas[:40]
+                hint["literal_formula_cell_count"] = len(literal_formulas)
+                hint["guidance"] = (
+                    "These formula-looking cells were stored as literal TEXT, not calculated. "
+                    "If calculation is intended, select cells.set_formulas or write typed "
+                    "{kind: formula, value: '=...'} cells, then read the results. "
+                    "Number formatting does not turn literal text into formulas. "
+                    "Keep literal text unchanged when it is what the user requested. "
+                    + hint["guidance"]
+                )
+        return hint
     if domain == "libreoffice_calc" and action == "range.read":
         cell_metadata = {
             key: result[key]

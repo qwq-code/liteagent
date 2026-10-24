@@ -1184,13 +1184,21 @@ def parse_action_request(raw: Any) -> ActionRequest:
             f"timeout_ms must be from {MIN_TIMEOUT_MS} to {MAX_TIMEOUT_MS}",
         )
     params = _mapping(data.get("params"), "params")
+    target = _mapping(data.get("target"), "target")
+    if action == "command.run" and target:
+        raise AdapterError(
+            "INVALID_REQUEST",
+            "command.run does not accept target fields; put command options "
+            "such as stdout_path inside params alongside argv. No command was executed.",
+            {"unsupported_target_fields": sorted(target)},
+        )
     validate_action_params(action, params)
     return ActionRequest(
         request_id=request_id,
         adapter=adapter,
         action=action,
         timeout_ms=timeout_ms,
-        target=_mapping(data.get("target"), "target"),
+        target=target,
         params=params,
         verify=_verification(data.get("verify")),
     )
