@@ -557,6 +557,22 @@ ACTION_KEYWORDS = {
         "word",
         "writer",
     },
+    ("libreoffice_writer", "document.deduplicate_records"): {
+        "deduplicate",
+        "duplicate",
+        "duplicates",
+        "entries",
+        "first",
+        "identifier",
+        "ids",
+        "keep",
+        "lines",
+        "records",
+        "remove",
+        "rows",
+        "train",
+        "unique",
+    },
     ("libreoffice_writer", "document.extract_images"): {
         "doc",
         "docx",
@@ -1198,6 +1214,10 @@ ACTION_KEYWORDS = {
         "word",
         "words",
     },
+    ("libreoffice_writer", "text.set_format_in_match"): {
+        "character", "format", "formatting", "literal", "match", "subscript",
+        "substring", "superscript", "text", "token",
+    },
     ("libreoffice_writer", "text.find_replace"): {
         "change",
         "clear",
@@ -1340,6 +1360,11 @@ ACTION_KEYWORDS = {
         "sender",
         "subject",
         "thunderbird",
+    },
+    ("thunderbird", "messages.update_flags"): {
+        "add", "all", "email", "emails", "flag", "folder", "mail", "mark",
+        "message", "messages", "remove", "selected", "star", "starred",
+        "thunderbird", "update",
     },
     ("thunderbird", "compose.set_recipients"): {
         "email",
@@ -1754,6 +1779,12 @@ ACTION_KEYWORDS = {
         "whole",
     },
     ("libreoffice_impress", "presentation.inspect"): {"extract", "text"},
+    ("libreoffice_impress", "presentation.create_summary_slide"): {
+        "create", "feature", "summary", "slide", "slides", "presentation", "titles",
+    },
+    ("libreoffice_impress", "slides.create_from_images"): {
+        "blank", "create", "image", "images", "insert", "sequence", "slides",
+    },
     ("libreoffice_impress", "slide.format_text_roles"): {
         "all",
         "body",
@@ -3511,6 +3542,53 @@ def _search_multi_app_actions(
     # must not exclude an explicitly requested route.
     # Natural-language queries continue through the ranked multi-route search.
     completed_route_set = set(completed_routes)
+    # A command-line search explicitly selects the public command primitive;
+    # workflow noun bonuses must not redirect it to a GUI document converter.
+    if query_requests_command and 'command.run' not in excluded_actions and ('os', 'command.run') not in excluded_routes:
+        return _search_multi_app_actions(
+            query='os.command.run', exact_query_tokens={'command', 'run'},
+            query_tokens={'command', 'run'}, instruction_tokens=set(),
+            error_tokens=error_tokens, limit=limit, excluded_actions=excluded_actions,
+            excluded_routes=excluded_routes, query_requests_command=False,
+            active_workspace_files=False, strict_generic=strict_generic,
+            semantic_actions=(), completed_routes=completed_routes,
+        )
+    # A model naming an application and an operation is refining the current
+    # stage. Other applications mentioned in the overall task must not win.
+    named_domains = {
+        owner for owner in DOWNSTREAM_ADAPTER_DOMAINS
+        if re.search(rf"(?<![\w]){re.escape(owner).replace('_', '[ _]')}(?![\w])", query.casefold())
+        or (owner.startswith('libreoffice_') and re.search(rf"\b{owner.split('_')[-1]}\b", query.casefold()))
+    }
+    operation_query = bool(exact_query_tokens.intersection(
+        {'create', 'write', 'read', 'inspect', 'save', 'find', 'open', 'append', 'insert', 'set', 'extract', 'query', 'replace'}))
+    contextual_instruction_tokens = set() if len(named_domains) == 1 and operation_query else instruction_tokens
+    search_tokens = exact_query_tokens | query_tokens | contextual_instruction_tokens
+    mail_flag_search = bool(
+        search_tokens.intersection({"star", "starred", "mark", "flag"})
+        and search_tokens.intersection({"add", "apply", "mark", "set", "star", "starred"})
+        and search_tokens.intersection({"email", "emails", "mail", "message", "messages"})
+        and search_tokens.intersection({"all", "every", "folder", "inbox", "local"})
+        and ("thunderbird", "messages.update_flags") not in completed_route_set
+    )
+    mail_flag_next_route = None
+    if mail_flag_search:
+        mail_flag_next_route = (
+            ("thunderbird", "messages.update_flags")
+            if ("thunderbird", "messages.query") in completed_route_set
+            else ("thunderbird", "messages.query")
+        )
+    # A saved mail attachment can be a document whose next requested operation
+    # is to extract an embedded image.  Keep this state derived only from the
+    # observed successful route and the user's image/document intent; the
+    # catalog must not invent an attachment path or file type.
+    attachment_image_search = bool(
+        ("thunderbird", "attachments.save") in completed_route_set
+        and search_tokens.intersection(VISUAL_IMAGE_TOKENS)
+        and search_tokens.intersection({"doc", "docx", "document", "word", "writer"})
+        and search_tokens.intersection({"extract", "export", "first", "image", "images"})
+        and ("libreoffice_writer", "document.extract_images") not in completed_route_set
+    )
     explicit_routes = [
         (adapter, action)
         for adapter in DOWNSTREAM_ADAPTER_DOMAINS
@@ -3526,6 +3604,38 @@ def _search_multi_app_actions(
             query.casefold(),
         )
     ]
+    # document.read_file reads a disk snapshot and never activates its source.
+    # If a later model search requests the current-document PDF export without
+    # any successful open step, route it to the saved-file export that accepts
+    # the observed source path. This keeps a previously inspected reminder or
+    # reference document from being exported accidentally as the deliverable.
+    saved_reader_completed = (
+        "libreoffice_writer", "document.read_file"
+    ) in completed_route_set
+    explicit_saved_file_export = (
+        saved_reader_completed
+        and ("os", "desktop.open_path") not in completed_route_set
+        and ("libreoffice_writer", "document.export_file_pdf") not in completed_route_set
+    )
+    if explicit_saved_file_export:
+        explicit_routes = [
+            route
+            for route in explicit_routes
+            if route != ("libreoffice_writer", "document.export_pdf")
+        ]
+    if mail_flag_next_route is not None:
+        explicit_routes = [
+            route for route in explicit_routes if route == mail_flag_next_route
+        ]
+    if attachment_image_search:
+        # Once a mailbox attachment has been saved, the next image operation is
+        # document extraction. Do not let an old OCR query select a generic
+        # image reader for a DOCX attachment.
+        explicit_routes = [
+            route
+            for route in explicit_routes
+            if route == ("libreoffice_writer", "document.extract_images")
+        ]
     if explicit_routes:
         route_domain, action = explicit_routes[0]
         return [
@@ -3552,7 +3662,6 @@ def _search_multi_app_actions(
 
     matches: list[tuple[int, str, str]] = []
     semantic = set(semantic_actions)
-    search_tokens = exact_query_tokens | query_tokens | instruction_tokens
     # Opening a file changes the active application document. Background
     # readers and current-document inspectors cannot satisfy that operation,
     # even when their nouns overlap the larger task more strongly.
@@ -3570,8 +3679,15 @@ def _search_multi_app_actions(
         and exact_query_tokens.intersection({"vscode", "vs_code", "editor", "code"})
     )
     attachment_save_search = bool(
-        exact_query_tokens.intersection({"attachment", "attachments"})
-        and exact_query_tokens.intersection({"download", "save", "extract"})
+        (
+            exact_query_tokens.intersection({"attachment", "attachments"})
+            and exact_query_tokens.intersection({"download", "save", "extract"})
+        )
+        or (
+            query_tokens.intersection({"message", "messages", "email", "emails"})
+            and query_tokens.intersection({"folder", "latest", "query"})
+            and search_tokens.intersection({"mail", "notes", "thunderbird"})
+        )
     )
     thunderbird_filter_search = bool(
         search_tokens.intersection({"filter", "filters", "rule", "rules"})
@@ -3614,6 +3730,12 @@ def _search_multi_app_actions(
     presentation_audio_search = bool(
         search_tokens.intersection({"audio", "music", "sound", "soundtrack"})
         and search_tokens.intersection({"deck", "impress", "presentation", "slide"})
+    )
+    summary_slide_search = bool(
+        search_tokens.intersection({"summary", "summarize", "summarise"})
+        and search_tokens.intersection(
+            {"slide", "slides", "deck", "impress", "presentation", "slideshow"}
+        )
     )
     # A document-to-speaker-notes request is a generic composition of existing
     # public primitives. Keep the required discovery, read, inspect, mutate,
@@ -3708,10 +3830,7 @@ def _search_multi_app_actions(
     # archiving. Once the structured reader has completed, keep the next
     # catalog search open to those later public routes instead of trapping it
     # in the discovery/read pair.
-    document_reader_completed = (
-        "libreoffice_writer",
-        "document.read_file",
-    ) in set(completed_routes)
+    document_reader_completed = saved_reader_completed
     if document_reader_completed:
         document_content_search = False
     document_packaging_search = bool(
@@ -3725,6 +3844,10 @@ def _search_multi_app_actions(
         and exact_query_tokens.intersection({"pdf"})
         and search_tokens.intersection({"doc", "docx", "document", "odt", "writer"})
     )
+    if explicit_saved_file_export and document_pdf_export_search:
+        # Keep the model's source/output arguments explicit while preventing
+        # an unverified active-document export from becoming the first route.
+        document_pdf_export_search = True
     terminal_window_capture_search = bool(
         search_tokens.intersection({"capture", "screenshot", "snapshot"})
         and search_tokens.intersection({"command", "commandline", "shell", "terminal"})
@@ -3844,6 +3967,15 @@ def _search_multi_app_actions(
                     ("thunderbird", "attachments.save"): 20_000,
                     ("thunderbird", "messages.query"): 19_000,
                 }.get((route_domain, action), 0)
+            if mail_flag_search:
+                mail_flag_route = (
+                    ("thunderbird", "messages.update_flags")
+                    if ("thunderbird", "messages.query") in completed_route_set
+                    else ("thunderbird", "messages.query")
+                )
+                if (route_domain, action) != mail_flag_route:
+                    continue
+                score += 25_000
             # An exact public action named in a query is more precise than
             # workflow-level word overlap (e.g. document.save in a project).
             # Keep alternatives for natural-language or compound queries.
@@ -3922,6 +4054,10 @@ def _search_multi_app_actions(
                 }
                 if (route_domain, action) not in export_routes:
                     continue
+                if explicit_saved_file_export and (route_domain, action) != (
+                    "libreoffice_writer", "document.export_file_pdf"
+                ):
+                    continue
                 score += export_routes[(route_domain, action)]
             if audio_extraction_search:
                 score += {
@@ -3943,10 +4079,20 @@ def _search_multi_app_actions(
                     ("libreoffice_impress", "audio.insert"): 800,
                     ("libreoffice_impress", "presentation.inspect"): 100,
                 }.get((route_domain, action), 0)
+            if summary_slide_search:
+                score += {
+                    ("libreoffice_impress", "presentation.create_summary_slide"): 20_000,
+                    ("libreoffice_impress", "presentation.inspect"): 18_000,
+                }.get((route_domain, action), 0)
+            if attachment_image_search:
+                score += {
+                    ("libreoffice_writer", "document.extract_images"): 25_000,
+                    ("os", "desktop.set_wallpaper"): 100,
+                }.get((route_domain, action), 0)
             if presentation_notes_transfer_search:
                 score += {
                     ("os", "filesystem.find"): 6000,
-                    ("libreoffice_writer", "document.read_file"): 5500,
+                    ("libreoffice_writer", "document.read_file"): 5800,
                     ("libreoffice_impress", "presentation.inspect"): 5600,
                     ("libreoffice_impress", "slide.set_notes"): 5200,
                     ("libreoffice_impress", "presentation.save"): 4800,
@@ -3995,6 +4141,8 @@ def _search_multi_app_actions(
                     ("libreoffice_calc", "workbook.inspect"): 4500,
                     ("libreoffice_calc", "range.read"): 3500,
                 }.get((route_domain, action), 0)
+            if len(named_domains) == 1 and operation_query and route_domain in named_domains:
+                score += 30_000
             if score:
                 matches.append((score, route_domain, action))
 

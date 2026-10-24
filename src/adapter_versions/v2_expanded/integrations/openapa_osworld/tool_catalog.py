@@ -132,7 +132,8 @@ DOMAIN_SIGNATURES = {
             '"destination_sheet": str, "destination": top-left A1 cell, '
             '"operation": "trim"|"collapse_whitespace"|"title_case"|'
             '"lowercase"|"uppercase", "skip_blank"?: bool}; applies one '
-            "text-only transformation and writes a same-sized output range; use separate calls for multiple transforms"
+            "text-only transformation and writes a same-sized output range; use separate calls for multiple transforms. "
+            "For an in-place final result, destination may equal the source column; do not create temporary columns."
         ),
         "range.set_scaled_display": (
             'params={"sheet": str, "range": A1 range, "divisor": positive power of 1000, '
@@ -741,6 +742,13 @@ DOMAIN_SIGNATURES = {
             '"output_directory": absolute|~/|file URL directory, '
             '"selection"?: "first"|"all", "overwrite"?: bool}; exports embedded images '
             "in main-document reference order and returns exact paths, sizes, and SHA-256 digests"
+        ),
+        "document.deduplicate_records": (
+            'params={"delimiter": one character, "key_column": zero-based int, '
+            '"trim_key"?: bool, "case_sensitive"?: bool, "skip_blank"?: bool}; '
+            "removes later duplicate body paragraphs by the selected delimited field, "
+            "keeps the first occurrence and original order, and preserves complete records; "
+            "inspect first and save/read back after the mutation"
         ),
         "table.read": (
             'params={"name": exact table name from document.inspect}; returns every '

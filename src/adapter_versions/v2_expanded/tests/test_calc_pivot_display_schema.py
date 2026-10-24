@@ -21,7 +21,7 @@ def _schema(wrapped: bool) -> dict:
         build_tools("multi_apps", ["adapter.call"], include_gui=False, strict_generic=True),
         [("libreoffice_calc", "pivot.create")],
     )
-    return tools[0]["function"]["parameters"]["oneOf"][0]["properties"]["payload"]["properties"]["params"]
+    return tools[0]["function"]["parameters"]["properties"]["payload"]["properties"]["params"]
 
 
 def _params(mode: str) -> dict:

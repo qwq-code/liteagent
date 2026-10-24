@@ -613,6 +613,7 @@ def query_messages(
                 "cc": ", ".join(item["address"] for item in cc),
                 "number_of_attachments": len(attachments),
                 "attachment_names": attachments,
+                "starred": _message_is_starred(message),
                 "_sort_timestamp": message_date.timestamp()
                 if message_date
                 else float("-inf"),
@@ -639,6 +640,124 @@ def query_messages(
         "select_from": select_from,
         "order": order,
         "messages": selected,
+    }
+
+
+MOZILLA_STATUS_MARKED = 0x0004
+
+
+def _mozilla_status(message: Message) -> int:
+    """Read Thunderbird's hexadecimal message status without trusting headers."""
+    raw = message.get("X-Mozilla-Status", "0")
+    try:
+        return int(str(raw).strip(), 16)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _message_is_starred(message: Message) -> bool:
+    return bool(_mozilla_status(message) & MOZILLA_STATUS_MARKED)
+
+
+def update_message_flags(
+    profile: Path,
+    folder_name: str,
+    *,
+    mailbox_indices: list[int],
+    flag: str,
+    value: bool,
+) -> dict[str, Any]:
+    """Update one supported Thunderbird message flag by observed mailbox index.
+
+    The index list is intentionally required: callers must first query the
+    visible folder and then pass exact selectors from that observation.  The
+    mailbox is locked while the update and read-back occur so a batch cannot
+    expose a partially written flag state.
+    """
+    if flag != "starred":
+        raise AdapterError("INVALID_REQUEST", "only the starred flag is supported")
+    if (
+        not isinstance(mailbox_indices, list)
+        or not mailbox_indices
+        or any(
+            isinstance(index, bool) or not isinstance(index, int) or index < 0
+            for index in mailbox_indices
+        )
+        or len(mailbox_indices) > 500
+        or len(set(mailbox_indices)) != len(mailbox_indices)
+    ):
+        raise AdapterError(
+            "INVALID_REQUEST",
+            "mailbox_indices must contain 1 to 500 unique non-negative observed indices",
+        )
+
+    source = _mailbox_folder_path(profile, folder_name)
+    box = mailbox.mbox(source, create=False)
+    requested = set(mailbox_indices)
+    messages: dict[int, Message] = {}
+    storage_keys: dict[int, Any] = {}
+    locked = False
+    try:
+        box.lock()
+        locked = True
+        # mailbox.mbox's integer key is a byte offset, not a zero-based row
+        # number. Translate the user-visible ordinal to its actual storage key.
+        for index, key in enumerate(box.iterkeys()):
+            if index in requested:
+                storage_keys[index] = key
+                messages[index] = box[key]
+        missing = sorted(requested.difference(messages))
+        if missing:
+            raise AdapterError(
+                "MESSAGE_NOT_FOUND",
+                "one or more mailbox_indices were not returned by the folder query",
+                {"folder_name": folder_name, "missing_mailbox_indices": missing},
+                404,
+            )
+
+        before = {index: _message_is_starred(message) for index, message in messages.items()}
+        # Process from the end of the mbox toward the beginning.  A longer
+        # replacement header can shift byte offsets for later messages, while
+        # earlier offsets remain stable.
+        for index in sorted(mailbox_indices, key=lambda item: storage_keys[item], reverse=True):
+            message = messages[index]
+            status = _mozilla_status(message)
+            updated_status = (
+                status | MOZILLA_STATUS_MARKED
+                if value
+                else status & ~MOZILLA_STATUS_MARKED
+            )
+            if updated_status != status:
+                if message.get("X-Mozilla-Status") is None:
+                    message["X-Mozilla-Status"] = f"{updated_status:04x}"
+                else:
+                    message.replace_header("X-Mozilla-Status", f"{updated_status:04x}")
+                box[storage_keys[index]] = message
+        box.flush()
+
+        # Read back the same selectors from the persisted mailbox.  This also
+        # makes the operation's result useful to the completion gate.
+        observed: dict[int, bool] = {}
+        for index, message in enumerate(box):
+            if index in requested:
+                observed[index] = _message_is_starred(message)
+    finally:
+        if locked:
+            box.unlock()
+        box.close()
+
+    expected = bool(value)
+    verified = all(observed.get(index) is expected for index in mailbox_indices)
+    return {
+        "folder": folder_name,
+        "flag": flag,
+        "value": expected,
+        "mailbox_indices": list(mailbox_indices),
+        "before": before,
+        "after": observed,
+        "changed_count": sum(before[index] != observed[index] for index in mailbox_indices),
+        "matched_count": len(mailbox_indices),
+        "verification_passed": verified,
     }
 
 

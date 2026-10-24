@@ -33,35 +33,19 @@ def _downstream_params_schema(adapter: str, action: str) -> dict[str, Any]:
                 {"anyOf": [{"required": ["range"]}, {"required": ["used_range_a1"]}]},
             ])
             if action == "range.write":
-                    properties["format"] = {"type": "object"}
-                    # The native write schema contains long prose on every nested
-                    # cell variant. Keep its structural contract, but compact the
-                    # model-visible copy so larger models can reach the write
-                    # decision within the bounded request budget.
-                    def _compact_schema(node: Any) -> None:
-                        if isinstance(node, dict):
-                            node.pop("description", None)
-                            node.pop("examples", None)
-                            for child in node.values():
-                                _compact_schema(child)
-                        elif isinstance(node, list):
-                            for child in node:
-                                _compact_schema(child)
-
-                    _compact_schema(params)
-                    params["description"] = (
-                        "Write a contiguous A1 range. For an append, target only the new rows below "
-                        "the observed used range (for example observed A1:E8 plus five records means "
-                        "A9:E13) and provide exactly one values row per target row. Do not include "
-                        "old rows or a leading blank row. Use typed kind=formula objects for formulas; "
-                        "plain strings beginning with '=' are literal text."
-                    )
+                properties["format"] = {"type": "object"}
+                # Retain adapter-owned descriptions: formula cells, formatted text,
+                # and merged ranges have different semantics despite similar JSON.
         description = DIRECT_ACTION_SCHEMAS[adapter][action].get("description")
         if isinstance(description, str) and description:
             params["description"] = description
         if adapter == "libreoffice_calc" and action == "range.write":
             params["description"] = (
                 str(params.get("description", ""))
+                + " values is a rectangular row-major matrix matching the target range. "
+                "A formula occupies one cell: use {kind: formula, value: '=SUM(A1:A3)'} "
+                "inside that matrix, never split '=' from its expression. For several "
+                "formulas at different cells, discover cells.set_formulas instead. "
                 + " For an append, target only rows below the observed used range and provide "
                 "exactly one values row per new source record; never copy existing ledger rows "
                 "or add a leading blank row. When OCR files[].expense_entry or "

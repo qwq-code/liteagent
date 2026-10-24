@@ -25,10 +25,12 @@ DEFAULT_TIMEOUT_MS = 30_000
 ACTIONS = frozenset(
     {
         "presentation.inspect",
+        "presentation.create_summary_slide",
         "presentation.set_page_size",
         "presentation.save",
         "presentation.export",
         "slide.create",
+        "slides.create_from_images",
         "slide.delete",
         "slide.duplicate",
         "slide.move",
@@ -291,6 +293,59 @@ def _slide_index(data: Mapping[str, Any], prefix: str = "params") -> None:
 
 
 def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
+    if action == "presentation.create_summary_slide":
+        allowed = {"slides", "index", "title"}
+        if set(params).difference(allowed):
+            raise AdapterError(
+                "INVALID_REQUEST",
+                "presentation.create_summary_slide received unsupported parameters",
+                {"unexpected": sorted(set(params).difference(allowed))},
+            )
+        slides = params.get("slides")
+        if (
+            not isinstance(slides, list)
+            or not slides
+            or len(slides) > 100
+            or any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in slides)
+            or len(set(slides)) != len(slides)
+        ):
+            raise AdapterError(
+                "INVALID_REQUEST",
+                "params.slides must contain 1 to 100 distinct zero-based slide indices",
+            )
+        _optional_nonnegative_int(params, "index")
+        if "title" in params:
+            _required_string(params, "title")
+    if action == "slides.create_from_images":
+        allowed = {"image_paths", "replace_existing_slides", "fit_mode"}
+        unexpected = set(params).difference(allowed)
+        if unexpected:
+            raise AdapterError(
+                "INVALID_REQUEST",
+                "slides.create_from_images received unsupported parameters",
+                {"unexpected": sorted(unexpected)},
+            )
+        paths = params.get("image_paths")
+        if (
+            not isinstance(paths, list)
+            or not 1 <= len(paths) <= 100
+            or any(not isinstance(path, str) or not path.strip() for path in paths)
+        ):
+            raise AdapterError(
+                "INVALID_REQUEST", "params.image_paths must contain 1 to 100 paths"
+            )
+        if "replace_existing_slides" not in params:
+            raise AdapterError(
+                "INVALID_REQUEST", "params.replace_existing_slides is required"
+            )
+        _optional_bool(params, "replace_existing_slides")
+        if params.get("fit_mode", "original") not in {"original", "cover", "contain", "stretch"}:
+            raise AdapterError(
+                "INVALID_REQUEST",
+                "params.fit_mode must be original, cover, contain, or stretch",
+            )
+        for path in paths:
+            validate_local_image_path(path)
     if action == "presentation.inspect":
         if set(params).difference({"slides"}):
             raise AdapterError(

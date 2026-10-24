@@ -1549,6 +1549,93 @@ def _create_slide(session: ImpressSession, params: dict[str, Any]) -> dict[str, 
     }
 
 
+def _presentation_slide_title(page: Any) -> str:
+    candidates: list[tuple[int, int, str]] = []
+    for index in range(page.getCount()):
+        shape = page.getByIndex(index)
+        text = _shape_text(shape).strip()
+        if not text:
+            continue
+        kind = str(getattr(shape, "ShapeType", ""))
+        position = getattr(shape, "Position", None)
+        y = int(getattr(position, "Y", 0))
+        is_title = "titletextshape" in kind.casefold()
+        candidates.append((0 if is_title else 1, y, text.splitlines()[0].strip()))
+    if not candidates:
+        return ""
+    return min(candidates)[2]
+
+
+def _presentation_create_summary_slide(
+    session: ImpressSession, params: dict[str, Any]
+) -> dict[str, Any]:
+    source_titles = []
+    for index in params["slides"]:
+        title = _presentation_slide_title(session.page(index))
+        if title:
+            source_titles.append({"slide": index, "title": title})
+    if not source_titles:
+        raise AdapterError(
+            "NO_SLIDE_TITLES",
+            "none of the selected slides contains a non-empty title or text heading",
+            {"slides": params["slides"]},
+            422,
+        )
+
+    index = params.get("index", session.pages.getCount())
+    if index > session.pages.getCount():
+        raise AdapterError("INVALID_REQUEST", "summary slide index is past the end")
+    page = session.pages.insertNewByIndex(index)
+    try:
+        page.Layout = 20
+        uno, _ = _uno_modules()
+        title_shape = session.doc.createInstance("com.sun.star.drawing.TextShape")
+        # UNO initializes the text object when the shape joins a page. Text
+        # assigned to an unattached shape can be discarded by page.add().
+        page.add(title_shape)
+        title_shape.Position = uno.createUnoStruct(
+            "com.sun.star.awt.Point", 900, 500
+        )
+        title_shape.Size = uno.createUnoStruct(
+            "com.sun.star.awt.Size", int(page.Width) - 1800, max(1200, int(page.Height * 0.16))
+        )
+        title_shape.String = params.get("title", "Summary Slide")
+        title_shape.CharHeight = 28.0
+        title_shape.CharWeight = 150.0
+
+        body_shape = session.doc.createInstance("com.sun.star.drawing.TextShape")
+        page.add(body_shape)
+        body_shape.Position = uno.createUnoStruct(
+            "com.sun.star.awt.Point", 1200, max(1900, int(page.Height * 0.2))
+        )
+        body_shape.Size = uno.createUnoStruct(
+            "com.sun.star.awt.Size", int(page.Width) - 2400, int(page.Height * 0.72)
+        )
+        body_text = "\n".join(
+            f"{item['slide'] + 1}. {item['title']}" for item in source_titles
+        )
+        body_shape.String = body_text
+        body_shape.CharHeight = 20.0
+        observed = [_shape_text(page.getByIndex(i)) for i in range(page.getCount())]
+        if params.get("title", "Summary Slide") not in observed or body_text not in observed:
+            raise AdapterError(
+                "VERIFICATION_FAILED",
+                "summary slide content did not read back exactly",
+                {"expected_title": params.get("title", "Summary Slide"), "expected_items": body_text, "observed": observed},
+                422,
+            )
+    except Exception:
+        session.pages.remove(page)
+        raise
+    return {
+        "slide": index,
+        "slide_count": session.pages.getCount(),
+        "title": params.get("title", "Summary Slide"),
+        "source_titles": source_titles,
+        "verification_passed": True,
+    }
+
+
 def _clear_page_shapes(page: Any) -> None:
     while page.getCount():
         page.remove(page.getByIndex(0))
@@ -2862,10 +2949,12 @@ def _settings(session: ImpressSession, params: dict[str, Any]) -> dict[str, Any]
 
 ACTIONS = {
     "presentation.inspect": _inspect,
+    "presentation.create_summary_slide": _presentation_create_summary_slide,
     "presentation.set_page_size": _set_page_size,
     "presentation.save": _save,
     "presentation.export": _export,
     "slide.create": _create_slide,
+    "slides.create_from_images": _create_slides_from_images,
     "slide.delete": _delete_slide,
     "slide.duplicate": _duplicate_slide,
     "slide.move": _move_slide,

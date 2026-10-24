@@ -262,7 +262,10 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
                 "minimum": 1,
                 "maximum": 500,
                 "default": 50,
-                "description": "Maximum number of matching messages to return.",
+                "description": (
+                    "Maximum number of matching messages to return. For a task that modifies every "
+                    "message in the folder, set limit=500 and verify returned_count equals matched_count."
+                ),
             },
             "select_from": {
                 "type": "string",
@@ -303,6 +306,41 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
         "required": ["folder_name"],
+    },
+    "messages.update_flags": {
+        "description": (
+            "Update exactly one supported flag on explicitly selected messages in one local folder. "
+            "First call messages.query and copy mailbox_indices from its returned rows; this action "
+            "does not search, select, or infer which messages the user meant. Supports flag='starred'. "
+            "value=true adds stars and value=false removes them. The persisted flag state is read back."
+        ),
+        "properties": {
+            "folder_name": {
+                **NONEMPTY_STRING,
+                "description": "Exact visible folder name returned by messages.query.",
+            },
+            "mailbox_indices": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 500,
+                "uniqueItems": True,
+                "items": {"type": "integer", "minimum": 0},
+                "description": (
+                    "Exact zero-based mailbox_index values returned by messages.query for this folder."
+                ),
+            },
+            "flag": {
+                "type": "string",
+                "enum": ["starred"],
+                "description": "The explicit message flag to update.",
+            },
+            "value": {
+                "type": "boolean",
+                "description": "true adds the star; false removes the star.",
+            },
+        },
+        "required": ["folder_name", "mailbox_indices", "flag", "value"],
+        "additionalProperties": False,
     },
     "messages.export_eml": {
         "properties": {

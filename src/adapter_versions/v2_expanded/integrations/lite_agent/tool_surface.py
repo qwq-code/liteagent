@@ -58,11 +58,13 @@ from .standard_location_semantics import constrain_output_tools
 from .tool_catalog import (
     INSPECT_ACTIONS,
     FORBIDDEN_DATASET_ACTIONS,
+    action_from_tool_name,
     build_tools,
     tool_name,
 )
 from .instruction_semantics import (
     requested_pivot_count,
+    requested_max_system_volume,
     strict_instruction_required_actions,
 )
 from .impress_title_formatting import (
@@ -75,6 +77,7 @@ from .impress_image_insertion import (
 from .state_model import RuntimeState
 from .visual_file_identity import pending_visual_image
 from .structural_observation_recovery import recover_structural_tool_surface
+from .bounded_recovery import recent_failure, repeated_tool, recover_tools
 from .terminal_tool_constraints import constrain_terminal_provenance_tools
 from .vscode_workspace_context import (
     constrain_workspace_add_tools,
@@ -83,6 +86,133 @@ from .vscode_workspace_context import (
 
 
 class ToolSurfaceMixin:
+    @staticmethod
+    def _constrain_max_system_volume(
+        tools: list[dict[str, Any]], state: RuntimeState
+    ) -> list[dict[str, Any]]:
+        """Map qualitative 'maximum volume' wording to normal 100% volume.
+
+        The adapter intentionally accepts explicit over-amplification values for
+        expert requests.  Only a natural-language maximum request gets the
+        narrower model-facing enum, so a model cannot confuse the API ceiling
+        (150) with the operating-system maximum (100).
+        """
+        if not requested_max_system_volume(state.domain, str(state.instruction)):
+            return tools
+
+        def constrain(parameters: Any, *, force_volume: bool = False) -> None:
+            if not isinstance(parameters, dict):
+                return
+            route = parameters.get("x-route")
+            if force_volume or (isinstance(route, dict) and (
+                route.get("adapter"), route.get("action")
+            ) == ("os", "audio.set_volume")):
+                properties = parameters.get("properties")
+                if isinstance(properties, dict) and isinstance(
+                    properties.get("percent"), dict
+                ):
+                    percent = properties["percent"]
+                    percent.pop("maximum", None)
+                    percent["enum"] = [100]
+                    percent["description"] = (
+                        "For a qualitative maximum-volume request, use exactly 100: "
+                        "the normal system maximum (0 dB). Values above 100 are explicit "
+                        "over-amplification requests and are not selected here."
+                    )
+            properties = parameters.get("properties")
+            if isinstance(properties, dict):
+                nested = properties.get("params")
+                if isinstance(nested, dict):
+                    constrain(nested, force_volume=force_volume)
+            for keyword in ("oneOf", "anyOf", "allOf"):
+                branches = parameters.get(keyword)
+                if isinstance(branches, list):
+                    for branch in branches:
+                        constrain(branch, force_volume=force_volume)
+
+        for tool in tools:
+            function = tool.get("function")
+            if not isinstance(function, dict):
+                continue
+            action = action_from_tool_name(state.domain, str(function.get("name", "")))
+            if action == "audio.set_volume":
+                constrain(function.get("parameters"), force_volume=True)
+            else:
+                constrain(function.get("parameters"))
+        return tools
+
+    @staticmethod
+    def _successful_route_pairs(state: RuntimeState) -> set[tuple[str, str]]:
+        """Return owning Adapter routes already executed successfully."""
+        return {
+            effective_canonical_action(event, state.domain)[:2]
+            for event in state.events
+            if event.executed
+            and not event.error
+            and isinstance(event.proposed, dict)
+            and event.proposed.get("kind") == "adapter"
+        }
+
+    @staticmethod
+    def _observed_find_suffixes(state: RuntimeState) -> set[str]:
+        """Read only suffixes returned by a successful filesystem.find.
+
+        Reader selection is allowed to use the public discovery result, but it
+        must never guess a path or a document type from the instruction alone.
+        """
+        suffixes: set[str] = set()
+        for event in state.events:
+            if not event.executed or event.error:
+                continue
+            if effective_canonical_action(event, state.domain)[:2] != (
+                "os",
+                "filesystem.find",
+            ):
+                continue
+            pending: list[Any] = [event.result]
+            for _ in range(6):
+                if not pending:
+                    break
+                children: list[Any] = []
+                for value in pending:
+                    if isinstance(value, dict):
+                        matches = value.get("matches")
+                        if isinstance(matches, list):
+                            for item in matches:
+                                if isinstance(item, dict) and isinstance(item.get("path"), str):
+                                    suffix = Path(item["path"]).suffix.casefold()
+                                    if suffix:
+                                        suffixes.add(suffix)
+                        for key in ("context_hint", "downstream_context", "result", "adapter_response"):
+                            child = value.get(key)
+                            if isinstance(child, (dict, list)):
+                                children.append(child)
+                    elif isinstance(value, list):
+                        children.extend(value)
+                pending = children
+        return suffixes
+
+    @staticmethod
+    def _compatible_reader_routes(
+        suffixes: set[str],
+    ) -> set[tuple[str, str]]:
+        """Map observed local file extensions to native public readers."""
+        routes: set[tuple[str, str]] = set()
+        if suffixes.intersection({".csv", ".ods", ".xls", ".xlsx"}):
+            routes.add(("libreoffice_calc", "workbook.read_file"))
+        if suffixes.intersection({".doc", ".docx", ".odt", ".rtf"}):
+            routes.add(("libreoffice_writer", "document.read_file"))
+        if suffixes.intersection({".pdf"}):
+            routes.update(
+                {
+                    ("os", "pdf.extract_text_batch"),
+                    ("os", "pdf.form.inspect"),
+                    ("os", "pdf.tables.inspect"),
+                    ("os", "pdf.outline.inspect"),
+                }
+            )
+        return routes
+
     @staticmethod
     def _vlc_preference_field(instruction: str) -> str | None:
         text = str(instruction)
@@ -411,6 +541,7 @@ class ToolSurfaceMixin:
         schema constraints just because the route was recovered.
         """
         tools = constrain_workspace_add_tools(tools, state)
+        tools = ToolSurfaceMixin._constrain_max_system_volume(tools, state)
         if state.domain == "multi_apps":
             # Keep initial multi-app discovery compatible with local tool-call endpoints.
             if not state.events and any(
@@ -479,22 +610,21 @@ class ToolSurfaceMixin:
             route_pairs = discovered_adapter_routes(state)
             adapter_call_name = tool_name("adapter.call")
             if adapter_since_catalog and not completion_recovery_surface:
-                # A catalog result is a bounded discovery snapshot.  Once one
-                # of its routes has executed, the remaining candidates may be
-                # stale or belong to a later workflow phase (for example,
-                # packaging before a required conversion).  Require a fresh
-                # model-selected search before exposing another Adapter route.
-                # This keeps the wrapper generic while preserving the model's
-                # control over the next action and all of its arguments.
-                route_pairs = []
-            if route_pairs:
-                successful_actions = [
+                # Reuse the model-selected atom for another target, without
+                # reopening unrelated candidates from the same catalog result.
+                # Changing operation still requires a new model-selected search.
+                last_route = next((
                     effective_canonical_action(event, state.domain)[:2]
-                    for event in state.events
-                    if event.executed
-                    and not event.error
-                    and event.proposed.get("kind") == "adapter"
-                ]
+                    for event in reversed(state.events)
+                    if event.executed and not event.error
+                    and event.proposed.get('kind') == 'adapter'
+                    and event.step > latest_catalog_step
+                ), None)
+                route_pairs = [pair for pair in route_pairs if pair == last_route]
+            if route_pairs:
+                successful_actions = list(
+                    ToolSurfaceMixin._successful_route_pairs(state)
+                )
                 instruction_tokens = {
                     token.strip(".,:;!?()[]{}")
                     for token in str(state.instruction).casefold().replace("/", " ").split()
@@ -535,22 +665,45 @@ class ToolSurfaceMixin:
                         if not isinstance(tool.get("function"), dict)
                         or tool["function"].get("name") not in {"gui_action", "gui_request"}
                     ]
-                # Once discovery has returned a document and a structured
-                # reader was part of that same catalog result, advance to the
-                # reader. Keeping the successful find route exposed lets a
-                # small model repeat it instead of consuming the observed
-                # document content. This is state-derived and applies to any
-                # document workflow, without choosing a path or task.
-                if (
-                    ("os", "filesystem.find") in successful_actions
-                    and ("libreoffice_writer", "document.read_file") in route_pairs
-                    and ("libreoffice_writer", "document.read_file") not in successful_actions
-                ):
-                    route_pairs = [
-                        pair
-                        for pair in route_pairs
-                        if pair == ("libreoffice_writer", "document.read_file")
-                    ]
+                # Once discovery has returned a document, select its native
+                # reader from the observed suffix.  This prevents a PDF/XLSX
+                # from being sent to Writer merely because the query said
+                # "read the document" and makes the route deterministic for
+                # small models.
+                if ("os", "filesystem.find") in successful_actions:
+                    observed_suffixes = ToolSurfaceMixin._observed_find_suffixes(state)
+                    compatible = ToolSurfaceMixin._compatible_reader_routes(
+                        observed_suffixes
+                    )
+                    reader_routes = {
+                        ("libreoffice_writer", "document.read_file"),
+                        ("libreoffice_calc", "workbook.read_file"),
+                        ("os", "pdf.extract_text_batch"),
+                        ("os", "pdf.form.inspect"),
+                        ("os", "pdf.tables.inspect"),
+                        ("os", "pdf.outline.inspect"),
+                    }
+                    if compatible:
+                        route_pairs = [
+                            pair
+                            for pair in route_pairs
+                            if pair not in reader_routes or pair in compatible
+                        ]
+                    if (
+                        ("libreoffice_writer", "document.read_file") in route_pairs
+                        and ("libreoffice_writer", "document.read_file")
+                        not in successful_actions
+                        and (
+                            not observed_suffixes
+                            or ("libreoffice_writer", "document.read_file")
+                            in compatible
+                        )
+                    ):
+                        route_pairs = [
+                            pair
+                            for pair in route_pairs
+                            if pair == ("libreoffice_writer", "document.read_file")
+                        ]
                 if not successful_actions and set(route_pairs) == {
                     ("os", "filesystem.find"),
                     ("libreoffice_writer", "document.read_file"),
@@ -558,6 +711,29 @@ class ToolSurfaceMixin:
                     # Resolve the generic discovery stage first; after it succeeds
                     # the existing state transition exposes only the document reader.
                     route_pairs = [("os", "filesystem.find")]
+                # A mailbox folder is an application object. After querying it,
+                # the only next step in an attachment workflow is saving the
+                # selected attachment; never route the folder through a local
+                # filesystem reader.
+                if (
+                    ("thunderbird", "messages.query") in successful_actions
+                    and ("thunderbird", "attachments.save") in route_pairs
+                    and ("thunderbird", "attachments.save") not in successful_actions
+                ):
+                    route_pairs = [
+                        pair
+                        for pair in route_pairs
+                        if pair == ("thunderbird", "attachments.save")
+                    ]
+                elif (
+                    ("thunderbird", "attachments.save") in successful_actions
+                    and ("libreoffice_writer", "document.extract_images") in route_pairs
+                ):
+                    route_pairs = [
+                        pair
+                        for pair in route_pairs
+                        if pair == ("libreoffice_writer", "document.extract_images")
+                    ]
                 if ToolSurfaceMixin._directory_table_reader_pending(state):
                     ocr_roots = ToolSurfaceMixin._directory_table_ocr_roots(state)
                     workbook_roots = ToolSurfaceMixin._directory_table_observed_roots(
@@ -923,7 +1099,26 @@ class ToolSurfaceMixin:
                 state.domain, ["shape.set_geometry"], include_gui=False,
                 include_control_tools=False, strict_generic=True,
             )]
-        return recover_structural_tool_surface(tools, state)
+        tools = recover_structural_tool_surface(tools, state)
+        recovery_failures = [event for event in state.events[-5:]
+                             if event.error and not event.executed
+                             and event.proposed.get('kind') == 'adapter']
+        if (recent_failure(state) and len(recovery_failures) >= 2) or repeated_tool(state):
+            # A failed phase must retain a route to observation/discovery and
+            # completion review. Selecting a control still goes through the
+            # normal catalog, provenance and completion validation.
+            controls = self._build_tools(state.domain, [], include_gui=False,
+                                         include_control_tools=True, strict_generic=True)
+            names = {tool.get('function', {}).get('name') for tool in tools}
+            tools = [*tools, *[tool for tool in controls
+                if tool.get('function', {}).get('name') in {'tools_search', 'propose_done', 'fail_task'} - names]]
+        if repeated_tool(state) and self.config.include_gui and self._gui_execution_configured():
+            recovery = self._build_tools(state.domain, [], include_gui=True)
+            names = {tool.get("function", {}).get("name") for tool in tools}
+            tools = [*tools, *[tool for tool in recovery
+                              if tool.get("function", {}).get("name") in {"gui_action", "gui_request"}
+                              and tool.get("function", {}).get("name") not in names]]
+        return recover_tools(tools, state)
 
     def _tools_for_state(self, state: RuntimeState) -> list[dict[str, Any]]:
         multi_app = state.domain == "multi_apps"

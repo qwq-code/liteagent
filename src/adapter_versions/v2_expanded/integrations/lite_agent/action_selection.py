@@ -311,6 +311,22 @@ class ActionSelectionMixin:
                 )
             return
         ordered_request = requested_ordered_image_slides(state.instruction)
+        if (
+            ordered_request is not None
+            and action == "slides.create_from_images"
+        ):
+            expected = {
+                "image_paths": ordered_request["files"],
+                "replace_existing_slides": True,
+            }
+            if any(
+                arguments.get(key) != value for key, value in expected.items()
+            ):
+                raise ValueError(
+                    "slides.create_from_images must use the ordered Desktop image paths "
+                    "and replace_existing_slides=true"
+                )
+            return
         if ordered_request is not None and action in {
             "slide.delete",
             "shape.delete",

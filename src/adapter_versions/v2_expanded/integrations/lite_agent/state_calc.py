@@ -1434,6 +1434,12 @@ class CalcStateMixin:
         request = requested_ordered_image_slides(self.instruction)
         if request is None:
             return None
+        # The strict generic surface exposes one atomic composition for an
+        # image-only deck.  Once it succeeds there is no per-slide cleanup or
+        # insertion step left to schedule.
+        atomic_events = self.successful_action_events("slides.create_from_images")
+        if atomic_events:
+            return None
         initial = self.initial_presentation_context_hint()
         initial_count = initial.get("slide_count")
         if not isinstance(initial_count, int) or initial_count < 1:
@@ -1492,9 +1498,21 @@ class CalcStateMixin:
         return None
 
     def ordered_image_slide_mutations_satisfied(self) -> bool:
+        request = requested_ordered_image_slides(self.instruction)
+        if request is None:
+            return False
+        atomic = self.successful_action_events("slides.create_from_images")
+        if atomic:
+            arguments = atomic[-1].proposed.get("arguments", {})
+            paths = arguments.get("image_paths")
+            return (
+                paths == request["files"]
+                and arguments.get("replace_existing_slides") is True
+                and isinstance(atomic[-1].result, dict)
+                and atomic[-1].result.get("slide_count") == request["slide_count"]
+            )
         return (
-            requested_ordered_image_slides(self.instruction) is not None
-            and bool(self.initial_presentation_context_hint())
+            bool(self.initial_presentation_context_hint())
             and self.next_ordered_image_slide_action() is None
         )
 
@@ -1503,7 +1521,11 @@ class CalcStateMixin:
         if request is None or not self.ordered_image_slide_mutations_satisfied():
             return False
         image_events = self.successful_action_events("shape.insert_image")
-        last_mutation_step = max(event.step for event in image_events)
+        atomic_events = self.successful_action_events("slides.create_from_images")
+        mutation_events = [*image_events, *atomic_events]
+        if not mutation_events:
+            return False
+        last_mutation_step = max(event.step for event in mutation_events)
         saves = [
             event
             for event in self.successful_adapter_events()

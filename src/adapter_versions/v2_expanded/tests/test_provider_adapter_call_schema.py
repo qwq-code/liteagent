@@ -38,7 +38,7 @@ def test_provider_adapter_call_requires_route_outside_payload() -> None:
     )
 
 
-def test_successful_discovered_route_requires_fresh_search_before_next_action() -> None:
+def test_successful_discovered_atom_can_repeat_but_other_routes_require_search() -> None:
     catalog = ExecutionEvent(
         step=1,
         timestamp_utc="",
@@ -77,4 +77,7 @@ def test_successful_discovered_route_requires_fresh_search_before_next_action() 
     after = ToolSurfaceMixin._apply_common_tool_constraints(tools, state)
     names = {tool["function"]["name"] for tool in after}
     assert "tools_search" in names
-    assert "adapter__adapter_call" not in names
+    assert "adapter__adapter_call" in names
+    schema = next(t['function']['parameters'] for t in after if t['function']['name'] == 'adapter__adapter_call')
+    assert schema['x-route'] == {'adapter': 'os', 'action': 'filesystem.find'}
+    assert schema['properties']['action'] == {'const': 'filesystem.find'}

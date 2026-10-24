@@ -36,7 +36,7 @@ def _schema(wrapped: bool) -> dict:
         for tool in tools
         if tool["function"]["name"] == "adapter__adapter_call"
     )
-    return function["parameters"]["oneOf"][0]["properties"]["payload"]["properties"][
+    return function["parameters"]["properties"]["payload"]["properties"][
         "params"
     ]
 

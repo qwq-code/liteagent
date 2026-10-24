@@ -60,6 +60,9 @@ from .terminal_output_semantics import (
     completion_errors as terminal_output_completion_errors,
 )
 from . import source_execution_semantics
+from .output_artifact_semantics import (
+    completion_errors as output_artifact_completion_errors,
+)
 from .workspace_open_semantics import (
     completion_errors as workspace_open_completion_errors,
 )
@@ -470,12 +473,16 @@ def strict_semantic_requirement_errors(state: Any) -> list[str]:
             *impress_semantics.completion_missing(state),
         ]
     if state.domain == "multi_apps":
-        return source_execution_semantics.completion_errors(state)
+        return [
+            *source_execution_semantics.completion_errors(state),
+            *output_artifact_completion_errors(state),
+        ]
     if state.domain == "os":
         return [
             *terminal_output_completion_errors(state),
             *filesystem_copy_completion_errors(state),
             *clipboard_path_completion_errors(state),
+            *output_artifact_completion_errors(state),
         ]
     if state.domain == "vs_code":
         return workspace_open_completion_errors(state)
@@ -490,6 +497,11 @@ def strict_semantic_action_equivalents(state: Any) -> dict[str, set[str]]:
         # Accept their successful execution as evidence; keep save/read-back and
         # target coverage checks, and never rewrite the recorded model action.
         equivalents["shape.set_geometry"] = set(ATOMIC_GEOMETRY_FIELDS)
+        # The verified image-deck operation already creates the slides and
+        # inserts their images. Requiring both older actions afterward makes
+        # the model add unwanted slides/objects to an otherwise complete deck.
+        equivalents["slide.create"] = {"slides.create_from_images"}
+        equivalents["shape.insert_image"] = {"slides.create_from_images"}
     if (
         state.domain == "libreoffice_impress"
         and impress_semantics.parse_textbox_underline_intent(str(state.instruction))

@@ -89,6 +89,16 @@ def _default_specs(
                 "sha256": result["sha256"],
             }
         ]
+    if action == "messages.update_flags":
+        return [
+            {
+                "type": "message_flags",
+                "folder_name": params["folder_name"],
+                "mailbox_indices": params["mailbox_indices"],
+                "flag": params["flag"],
+                "value": params["value"],
+            }
+        ]
     if action == "accounts.remove":
         return [
             {

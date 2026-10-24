@@ -21,7 +21,9 @@ from thunderbird_adapter.profile import (
     query_messages,
     resolve_filter_rules_path,
     save_attachment,
+    update_message_flags,
 )
+from thunderbird_adapter.verifier import verify_check
 from thunderbird_adapter.schema import ACTIONS as THUNDERBIRD_ACTIONS
 from thunderbird_adapter.schema import parse_action_request
 from thunderbird_adapter.schema import validate_action_params as validate_thunderbird
@@ -44,12 +46,15 @@ def _message(
     *,
     message_id: str | None = None,
     attachment_name: str | None = None,
+    mozilla_status: str | None = None,
 ) -> EmailMessage:
     message = EmailMessage()
     message["From"] = "sender@example.test"
     message["To"] = "recipient@example.test"
     message["Subject"] = subject
     message["Date"] = "Tue, 01 Jan 2030 00:00:00 +0000"
+    if mozilla_status is not None:
+        message["X-Mozilla-Status"] = mozilla_status
     if message_id is not None:
         message["Message-ID"] = f"<{message_id}>"
     message.set_content("synthetic message body")
@@ -75,6 +80,7 @@ def _profile_with_messages(tmp_path: Path) -> Path:
                 "stable selector",
                 message_id="stable@example.test",
                 attachment_name="stable.bin",
+                mozilla_status="0001",
             )
         )
         box.flush()
@@ -184,6 +190,75 @@ def test_query_projection_keeps_nonempty_message_id() -> None:
     )
 
     assert context["messages"][0]["message_id"] == "stable@example.test"
+
+
+def test_folder_flag_update_uses_observed_indices_and_reads_back(tmp_path: Path) -> None:
+    profile = _profile_with_messages(tmp_path)
+    query = query_messages(profile, "Archive", limit=500)
+    assert query["matched_count"] == query["returned_count"] == 2
+    rows = {item["mailbox_index"]: item for item in query["messages"]}
+    assert rows[0]["starred"] is False
+    assert rows[1]["starred"] is False
+
+    updated = update_message_flags(
+        profile,
+        "Archive",
+        mailbox_indices=[0, 1],
+        flag="starred",
+        value=True,
+    )
+    assert updated["verification_passed"] is True
+    assert updated["changed_count"] == 2
+    assert updated["after"] == {0: True, 1: True}
+    assert verify_check(
+        {
+            "type": "message_flags",
+            "profile": str(profile),
+            "folder_name": "Archive",
+            "mailbox_indices": [0, 1],
+            "flag": "starred",
+            "value": True,
+        }
+    )["passed"]
+
+    # A different Mozilla status bit survives setting and clearing the star.
+    box = mailbox.mbox(profile / "Mail" / "Local Folders" / "Archive", create=False)
+    try:
+        assert int(box[1]["X-Mozilla-Status"], 16) & 0x0001
+    finally:
+        box.close()
+    cleared = update_message_flags(
+        profile,
+        "Archive",
+        mailbox_indices=[1],
+        flag="starred",
+        value=False,
+    )
+    assert cleared["verification_passed"] is True
+    box = mailbox.mbox(profile / "Mail" / "Local Folders" / "Archive", create=False)
+    try:
+        assert int(box[1]["X-Mozilla-Status"], 16) == 0x0001
+    finally:
+        box.close()
+
+
+def test_folder_flag_update_contract_is_typed_and_bounded() -> None:
+    action = "messages.update_flags"
+    arguments = {
+        "folder_name": "Bills",
+        "mailbox_indices": [0, 1],
+        "flag": "starred",
+        "value": True,
+    }
+    exposed = _exposed_schema(action)
+    jsonschema.Draft202012Validator.check_schema(exposed)
+    assert not list(jsonschema.Draft202012Validator(exposed).iter_errors(arguments))
+    validate_thunderbird(action, arguments)
+    with pytest.raises(ThunderbirdAdapterError, match="unique"):
+        validate_thunderbird(
+            action,
+            {**arguments, "mailbox_indices": [0, 0]},
+        )
 
 
 def test_mailbox_index_only_contract_is_identical_across_owning_surfaces() -> None:

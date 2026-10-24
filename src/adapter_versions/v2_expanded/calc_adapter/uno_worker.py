@@ -897,27 +897,9 @@ def _write(session: CalcSession, params: dict[str, Any]) -> dict[str, Any]:
     rows = address.EndRow - address.StartRow + 1
     columns = address.EndColumn - address.StartColumn + 1
     raw_values = params["values"]
-    raw_rows = raw_values if isinstance(raw_values[0], list) else [raw_values]
-    used = _used_range(session.sheet(params["sheet"]))
-    if address.StartRow > used["end_row"] and len(raw_rows) > 1:
-        existing_range = session.sheet(params["sheet"]).getCellRangeByPosition(
-            address.StartColumn, used["start_row"], address.EndColumn, used["end_row"]
-        )
-        compare_columns = min(columns, 4)
-        existing_rows = {
-            tuple(str(existing_range.getCellByPosition(column, row).getString()) for column in range(compare_columns))
-            for row in range(used["rows"])
-        }
-        candidate_rows = {
-            tuple(str(cell) for cell in row[:compare_columns])
-            for row in raw_rows
-        }
-        if candidate_rows and candidate_rows.issubset(existing_rows):
-            raise AdapterError(
-                "INVALID_REQUEST",
-                "append would rewrite only rows already present in the observed used range; provide only new records below it",
-                {"conflicting_field": "values", "corrective_action": "remove existing rows and keep only new records"},
-            )
+    # range.write owns the explicitly selected rectangle. Similar values in
+    # other rows are not evidence of an invalid write (or a unique record key).
+    # Deduplication and append planning belong to the caller, not this primitive.
     values = orient_typed_values(
         raw_values, target_rows=rows, target_columns=columns
     )

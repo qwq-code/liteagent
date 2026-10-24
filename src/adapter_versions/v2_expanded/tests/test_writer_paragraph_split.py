@@ -73,6 +73,12 @@ class Body:
         self.insertions += 1
 
 
+def _route_params_schema(parameters):
+    if isinstance(parameters.get("x-route"), dict):
+        return parameters["properties"]["payload"]["properties"]["params"]
+    return parameters["oneOf"][0]["properties"]["payload"]["properties"]["params"]
+
+
 @pytest.fixture
 def session(monkeypatch):
     body = Body(
@@ -96,9 +102,7 @@ def test_split_uses_one_public_schema_and_preserves_arguments(forwarded, after_t
             build_tools("multi_apps", ["adapter.call"], include_gui=False),
             [("libreoffice_writer", "paragraph.split")],
         )[0]
-        schema = tool["function"]["parameters"]["oneOf"][0]["properties"]["payload"][
-            "properties"
-        ]["params"]
+        schema = _route_params_schema(tool["function"]["parameters"])
     else:
         schema = build_tools(
             "libreoffice_writer",
@@ -174,9 +178,6 @@ def test_split_changes_only_the_selected_boundary(session, anchor, blank_between
                 "",
                 "",
                 " notes.  Middle?  Tail \u201cZ\u201d.",
-                "",
-                "",
-                "",
             ],
         ),
     ],
@@ -202,15 +203,19 @@ def test_ordered_boundaries_preserve_source_and_report_final_indices(
     assert result["text_unchanged"] is True
     assert "split_offset" not in result
     offset = 0
+    expected_insertions = 0
     for position, boundary in enumerate(result["boundaries"]):
         offset = original[1].index(anchors[position], offset) + len(anchors[position])
+        trailing = position == len(anchors) - 1 and offset == len(original[1])
+        if not trailing:
+            expected_insertions += gap + 1
         assert boundary == {
             "after_text": anchors[position],
             "split_offset": offset,
-            "right_paragraph_index": 1 + (position + 1) * (gap + 1),
+            "right_paragraph_index": 1 + expected_insertions,
         }
-    assert result["right_paragraph_index"] == 1 + len(anchors) * (gap + 1)
-    assert body.insertions == len(anchors) * (gap + 1)
+    assert result["right_paragraph_index"] == 1 + expected_insertions
+    assert body.insertions == expected_insertions
     assert params == unchanged_params
     compact = compact_context_hint_for_model(
         adapter_context_hint(

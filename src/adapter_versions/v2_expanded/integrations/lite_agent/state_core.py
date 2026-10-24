@@ -228,7 +228,11 @@ class RuntimeStateCoreMixin:
                 and isinstance(route.get("adapter"), str)
                 and isinstance(route.get("action"), str)
             ):
-                routes.add((route["adapter"], route["action"]))
+                # Parameterized routes retain valid alternative requests. Their
+                # exact rejected arguments remain blocked by active_request_block.
+                schema = DIRECT_ACTION_SCHEMAS.get(route["adapter"], {}).get(route["action"])
+                if schema is not None and not schema.get("properties"):
+                    routes.add((route["adapter"], route["action"]))
         return routes
 
     def active_request_block(
@@ -314,6 +318,7 @@ class RuntimeStateCoreMixin:
                     "shape.delete",
                     "slide.create",
                     "shape.insert_image",
+                    "slides.create_from_images",
                 }
                 and requested_ordered_image_slides(self.instruction) is not None
             ):
@@ -420,7 +425,9 @@ class RuntimeStateCoreMixin:
         input_suffixes: set[str] = set()
         if self.domain == "libreoffice_impress" and "audio.insert" in action_set:
             input_suffixes.update({".mp3", ".wav", ".ogg", ".m4a"})
-        if self.domain == "libreoffice_impress" and "shape.insert_image" in action_set:
+        if self.domain == "libreoffice_impress" and action_set.intersection(
+            {"shape.insert_image", "slides.create_from_images"}
+        ):
             input_suffixes.update({".png", ".jpg", ".jpeg"})
         return [
             filename

@@ -68,6 +68,7 @@ ACTIONS = frozenset(
         "document.inspect",
         "document.read_file",
         "document.extract_images",
+        "document.deduplicate_records",
         "document.save",
         "document.export_pdf",
         "document.export_file_pdf",
@@ -87,6 +88,7 @@ ACTIONS = frozenset(
         "text.find",
         "text.find_replace",
         "text.set_format",
+        "text.set_format_in_match",
         "table.read",
         "table.convert_text",
         "table.insert_at_cursor",
@@ -669,6 +671,26 @@ def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
             raise AdapterError(
                 "INVALID_REQUEST", "params.max_chars must be at most 12000"
             )
+    elif action == "document.deduplicate_records":
+        allowed = {"delimiter", "key_column", "trim_key", "case_sensitive", "skip_blank"}
+        unexpected = sorted(set(params) - allowed)
+        if unexpected:
+            raise AdapterError(
+                "INVALID_REQUEST",
+                "document.deduplicate_records received unsupported parameters",
+                {"unexpected": unexpected, "allowed": sorted(allowed)},
+            )
+        delimiter = params.get("delimiter")
+        if not isinstance(delimiter, str) or len(delimiter) != 1 or delimiter in "\r\n":
+            raise AdapterError(
+                "INVALID_REQUEST", "params.delimiter must be one non-newline character"
+            )
+        _nonnegative_int(params, "key_column")
+        for field in ("trim_key", "case_sensitive", "skip_blank"):
+            if field in params and not isinstance(params[field], bool):
+                raise AdapterError(
+                    "INVALID_REQUEST", f"params.{field} must be a boolean"
+                )
     elif action == "document.extract_images":
         _extract_images_params(params)
     elif action == "document.export_file_pdf":
@@ -866,6 +888,33 @@ def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
             or len(expected) != end - start
         ):
             raise _text_range_mismatch(start, end, expected, nonempty=True)
+        _validate_character_format(
+            {key: params[key] for key in CHARACTER_FORMAT_FIELDS if key in params}
+        )
+    elif action == "text.set_format_in_match":
+        allowed = {
+            "literal",
+            "occurrence",
+            "match_start_offset",
+            "match_end_offset",
+            "case_sensitive",
+        } | CHARACTER_FORMAT_FIELDS
+        unexpected = sorted(set(params) - allowed)
+        if unexpected:
+            raise AdapterError(
+                "INVALID_REQUEST",
+                "text.set_format_in_match received unsupported parameters",
+                {"unexpected": unexpected, "allowed": sorted(allowed)},
+            )
+        _string(params, "literal")
+        for field in ("occurrence", "match_start_offset", "match_end_offset"):
+            _nonnegative_int(params, field)
+        if params["match_end_offset"] <= params["match_start_offset"]:
+            raise _text_range_mismatch(
+                params["match_start_offset"], params["match_end_offset"], "", nonempty=True
+            )
+        if "case_sensitive" in params and not isinstance(params["case_sensitive"], bool):
+            raise AdapterError("INVALID_REQUEST", "params.case_sensitive must be boolean")
         _validate_character_format(
             {key: params[key] for key in CHARACTER_FORMAT_FIELDS if key in params}
         )

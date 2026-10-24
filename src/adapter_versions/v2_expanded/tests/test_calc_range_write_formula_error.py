@@ -213,6 +213,34 @@ def test_formula_error_restores_mixed_target_atomically_and_preserves_args() -> 
     assert params == original_params
 
 
+@pytest.mark.parametrize("last_value", ["same", "new"])
+def test_explicit_append_does_not_infer_record_identity_from_four_columns(
+    monkeypatch, last_value,
+) -> None:
+    session, target, _ = _session(
+        [[_Cell() for _ in range(5)] for _ in range(2)], start_row=1,
+    )
+    existing = _Range([[_Cell(kind="string", value=value)
+                        for value in ["a", "b", "c", "d", "same"]]])
+    sheet = SimpleNamespace(
+        getCellRangeByName=lambda _: target,
+        getCellRangeByPosition=lambda *_: existing,
+    )
+    session.sheet = lambda _: sheet
+    monkeypatch.setattr(uno_worker, "_used_range", lambda _: {
+        "start_row": 0, "end_row": 0, "rows": 1,
+    })
+    values = [["a", "b", "c", "d", last_value] for _ in range(2)]
+    params = {"sheet": "Records", "range": "A2:E3", "values": values}
+    original = deepcopy(params)
+
+    uno_worker._write(session, params)
+
+    assert [[cell.getString() for cell in row] for row in target.cells] == values
+    assert [cell.getString() for cell in existing.cells[0]] == ["a", "b", "c", "d", "same"]
+    assert params == original
+
+
 def test_formula_error_restores_number_format_applied_by_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

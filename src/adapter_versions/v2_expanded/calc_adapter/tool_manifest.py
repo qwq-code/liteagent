@@ -751,7 +751,10 @@ _ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
                     "collapse_whitespace removes outer whitespace and replaces each "
                     "internal whitespace run with one space; title_case changes letter "
                     "case only. For multiple operations, make separate calls using the "
-                    "previous output as the next source, and read back each result."
+                    "previous output as the next source, and read back each result. "
+                    "When the final result belongs in an existing target column, the "
+                    "destination may equal the source/output column; do not create "
+                    "temporary columns or write outside the requested data range."
                 ),
             },
             "skip_blank": {

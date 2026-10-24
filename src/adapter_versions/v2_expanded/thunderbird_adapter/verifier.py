@@ -3,10 +3,17 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import mailbox
 from pathlib import Path
 from typing import Any
 
-from .profile import find_profile, read_preferences, resolve_filter_rules_path
+from .profile import (
+    _mailbox_folder_path,
+    _message_is_starred,
+    find_profile,
+    read_preferences,
+    resolve_filter_rules_path,
+)
 from .ui import accessibility_state
 
 
@@ -24,10 +31,12 @@ def _result(
 
 
 def verify_check(check: dict[str, Any]) -> dict[str, Any]:
-    profile = (
-        find_profile(check.get("profile")) if check["type"] != "accessibility" else None
-    )
     kind = check["type"]
+    profile = (
+        find_profile(check.get("profile"))
+        if kind not in {"accessibility"}
+        else None
+    )
     if kind == "preferences":
         observed = read_preferences(profile / "prefs.js")
         expected = dict(check.get("values", {}))
@@ -139,6 +148,26 @@ def verify_check(check: dict[str, Any]) -> dict[str, Any]:
             check,
             observed,
             expected,
+        )
+    if kind == "message_flags":
+        source = _mailbox_folder_path(profile, check["folder_name"])
+        selected = set(check["mailbox_indices"])
+        observed: dict[int, bool] = {}
+        box = mailbox.mbox(source, create=False)
+        try:
+            for index, message in enumerate(box):
+                if index in selected:
+                    observed[index] = _message_is_starred(message)
+        finally:
+            box.close()
+        expected_value = bool(check["value"])
+        expected = {index: expected_value for index in check["mailbox_indices"]}
+        passed = check["flag"] == "starred" and observed == expected
+        return _result(
+            passed,
+            check,
+            {"folder_name": check["folder_name"], "starred": observed},
+            {"folder_name": check["folder_name"], "starred": expected},
         )
     if kind == "account_removed":
         data = json.loads((profile / "logins.json").read_text(encoding="utf-8"))

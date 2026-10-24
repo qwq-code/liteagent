@@ -25,11 +25,12 @@ from .filesystem_copy_semantics import (
 )
 from .safety import assert_agent_surface_safe as assert_safe_agent_surface
 from .source_execution_semantics import protocol_guidance
-from .tool_catalog import instruction_requests_code_execution, tool_name
+from .tool_catalog import action_from_tool_name, instruction_requests_code_execution, tool_name
 from .instruction_semantics import strict_instruction_required_actions
 from .state_model import RuntimeState
 from .strict_contracts import RANGE_WRITE_FACADES
 from .recovery_surface import last_failure_summary
+from .bounded_recovery import recovery_guidance as observed_recovery_guidance
 
 
 # Ordinary protocol retries stay deliberately small.  A failed call after a
@@ -146,9 +147,27 @@ class AgentProtocolMixin:
             "input_pattern and cwd_source, for example "
             "{\"input_pattern\":\"*\",\"cwd_source\":\"explicit\","
             "\"cwd_path\":\"/home/user/Desktop\"}; never use path or paths. "
-            "For a first batch OCR run, set payload.timeout_ms=300000 beside params."
+            "For a first batch OCR run, set payload.timeout_ms=300000 beside params. "
+            "Choose readers by extension: .xlsx/.ods uses Calc workbook.read_file, "
+            ".docx/.odt uses Writer, and PDF forms use os.pdf.form.inspect followed by "
+            "os.pdf.form.fill. For spreadsheet-to-PDF work, read the workbook first, "
+            "inspect the form fields, then make one explicitly named output per row "
+            "using that employee's values. Mailbox folders are not filesystem paths: "
+            "query the named Thunderbird folder with messages.query, then save the "
+            "selected email attachment with attachments.save before opening it. Use "
+            "the exact returned local path; never guess internal attachment paths."
             if state.domain == "multi_apps"
-            else ""
+            else (
+                " For character formatting inside a literal token, prefer "
+                "text.set_format_in_match and select the occurrence plus relative "
+                "substring offsets. To subscript the 2 in H2O, select literal H2O, "
+                "occurrence 0, match_start_offset 1 and match_end_offset 2. Do not "
+                "insert markup such as <sub>; Writer treats it as literal text. If "
+                "using text.find with text.set_format, copy paragraph_index, absolute "
+                "start/end offsets and matched_text from the same result exactly."
+                if state.domain == "libreoffice_writer"
+                else ""
+            )
         )
         code_execution = source_workflow_guidance or (
             " For a source-code task that explicitly asks you to run or execute the code, read the relevant source and use command.run for a finite baseline reproduction before the first source mutation. After editing, use command.run again for finite verification before propose_done. For an interactive or long-running program, use a bounded import, syntax check, or focused test instead of launching it indefinitely."
@@ -185,6 +204,7 @@ class AgentProtocolMixin:
             if failure
             else ""
         )
+        failure_guidance += " " + observed_recovery_guidance(state)
         missing_fields: list[str] = []
         if isinstance(protocol_error, dict):
             raw_fields = protocol_error.get("missing_fields")
@@ -230,8 +250,8 @@ class AgentProtocolMixin:
         ):
             search_route_guidance = (
                 " The previous tools_search call was not accepted because the public "
-                "route was already returned. If adapter__adapter_call is listed, call "
-                "that wrapper now with model-selected arguments; do not search again."
+                "route was already returned. Choose its matching function from the "
+                "current tools list with that function's parameter schema; do not search again."
             )
         repeat_cue = ""
         if protocol_recovery and isinstance(protocol_error, dict):
@@ -349,7 +369,7 @@ class AgentProtocolMixin:
             "describe an object on a non-active worksheet; use structural inspect rather than "
             "switching sheets or recreating it."
         )
-        return f"""You are a lightweight OSWorld desktop agent. Perform the user's task in the current VM. Call exactly one provided tool per turn. Prefer deterministic Adapter tools over GUI. If a structural inspection tool and a dependent mutation tool are both provided, call the inspection tool first, then use the mutation with the exact documented schema; if only inspection is provided, call it and do not stop with prose because a later turn may expose the dependent action. When structural inspect output already identifies the requested object and an exposed Adapter action accepts that identifier, call the Adapter directly; it does not require the object to be selected or visible in the GUI. Do not navigate or click merely to select an object that inspect already identified. A tool result with executed=false is not a confirmed success; inspect the error and any partial results before choosing a correction. A rejected call did not run, but an execution or verification failure may have changed state. Never claim success from a proposed call. At the start of a multi_apps task, the only callable action surface is tools_search until it returns adapter__adapter_call; never emit a downstream name such as os.filesystem.find as a tool call before that wrapper is exposed. After any successful tools_search result that contains adapter__adapter_call, call that wrapper on the next turn; do not issue another tools_search merely to refine a returned route. Use tools_search if a required public action is not exposed.{gui_guidance}{calc_guidance}{filesystem_guidance} For people, objects, scenes, layout, or other visual appearance in image files, open each relevant image and inspect the screenshot; OCR only extracts visible text and cannot classify visual subjects. When the instruction explicitly requires command-line or terminal execution, set provenance=\"shell_history\" on each relevant command.run or terminal.show_output call. {completion_readback} A successful Adapter result with verification_passed=true and a matching structural read-back already satisfies that requirement; propose_done instead of calling an unrelated verifier. The completion gate may reject unsupported completion and return missing items. Before propose_done, compare every clause in the instruction against the truthful action ledger. Never claim an argument, value, target, or operation that is absent from an executed=true event; use tools_search to continue when any clause lacks evidence. Benchmark task identifiers, evaluator state, golden artifacts, and task-specific execution routes are unavailable; solve only from the instruction, screenshot, and public generic tools. Task domain: {state.domain}.{code_execution}{environment}{replan}{failure_guidance}{recovery_guidance}{terminal_audit_guidance}"""
+        return f"""You are a lightweight OSWorld desktop agent. Perform the user's task in the current VM. Call exactly one provided tool per turn. Prefer deterministic Adapter tools over GUI. If a structural inspection tool and a dependent mutation tool are both provided, call the inspection tool first, then use the mutation with the exact documented schema; if only inspection is provided, call it and do not stop with prose because a later turn may expose the dependent action. When structural inspect output already identifies the requested object and an exposed Adapter action accepts that identifier, call the Adapter directly; it does not require the object to be selected or visible in the GUI. Do not navigate or click merely to select an object that inspect already identified. A tool result with executed=false is not a confirmed success; inspect the error and any partial results before choosing a correction. A rejected call did not run, but an execution or verification failure may have changed state. Never claim success from a proposed call. Use only function names in the current tools list. At the start of a multi_apps task, use tools_search to discover an operation. After a successful search, choose the matching currently exposed function and follow its current parameter schema; do not search again merely to refine an available operation. Historical action records and search results describe internal adapter routes, not necessarily the callable function name or argument format for this turn. Put parameters directly in the selected function arguments object; never wrap that object in the function name or an action/arguments envelope. Use tools_search if a required public action is not exposed.{gui_guidance}{calc_guidance}{filesystem_guidance} For people, objects, scenes, layout, or other visual appearance in image files, open each relevant image and inspect the screenshot; OCR only extracts visible text and cannot classify visual subjects. When the instruction explicitly requires command-line or terminal execution, set provenance=\"shell_history\" on each relevant command.run or terminal.show_output call. {completion_readback} A successful Adapter result with verification_passed=true and a matching structural read-back already satisfies that requirement; propose_done instead of calling an unrelated verifier. The completion gate may reject unsupported completion and return missing items. Before propose_done, compare every clause in the instruction against the truthful action ledger. Never claim an argument, value, target, or operation that is absent from an executed=true event; use tools_search to continue when any clause lacks evidence. Benchmark task identifiers, evaluator state, golden artifacts, and task-specific execution routes are unavailable; solve only from the instruction, screenshot, and public generic tools. Task domain: {state.domain}.{code_execution}{environment}{replan}{failure_guidance}{recovery_guidance}{terminal_audit_guidance}"""
 
     def assert_agent_surface_safe(
         self,
@@ -417,7 +437,9 @@ class AgentProtocolMixin:
         else:
             summary = state.context_summary(strict_generic=True)
             normal_budget = (
-                MODEL_BATCH_NORMAL_MAX_CHARS
+                MODEL_FORM_RECOVERY_MAX_CHARS
+                if _contains_pdf_form_observation(summary)
+                else MODEL_BATCH_NORMAL_MAX_CHARS
                 if contains_text_batch_context(summary)
                 else MODEL_PROTOCOL_RECOVERY_MAX_CHARS
             )
@@ -550,7 +572,55 @@ class AgentProtocolMixin:
         return proposal
 
     def output_token_budget(self, state: RuntimeState) -> int:
-        exposed_names = {tool["function"]["name"] for tool in self.tools(state)}
+        exposed_tools = self.tools(state)
+        exposed_names = {tool["function"]["name"] for tool in exposed_tools}
+        # Content-bearing atomic writes can legitimately exceed a short control
+        # call's budget. Give direct and discovered routes the same bounded room.
+        content_actions = {
+            "range.write", "cells.set_formulas", "workbook.create_new",
+            "document.append_paragraphs", "table.insert_at_cursor",
+            "table.insert_after_text", "text.find_replace", "slide.set_notes",
+            "file.replace_literal",
+        }
+
+        def is_content_write(tool: dict[str, Any]) -> bool:
+            function = tool.get("function", {})
+            if not isinstance(function, dict):
+                return False
+            action = action_from_tool_name(state.domain, str(function.get("name", "")))
+            if action in content_actions:
+                return True
+            parameters = tool.get("function", {}).get("parameters", {})
+            candidates = [parameters.get("x-route")]
+            candidates.extend(
+                branch.get("x-route") for branch in parameters.get("oneOf", [])
+                if isinstance(branch, dict)
+            )
+            return any(
+                isinstance(route, dict)
+                and route.get("action") in content_actions
+                for route in candidates
+            )
+
+        if any(is_content_write(tool) for tool in exposed_tools):
+            # The same matrix write needs the same room when discovered through
+            # multi_apps. Flat atomic projection happens later in model_client.
+            return max(self.config.max_output_tokens, 4096)
+        if any(
+            isinstance(route, dict)
+            and route.get("adapter") == "os"
+            and route.get("action") == "pdf.form.fill"
+            for tool in exposed_tools
+            for route in (
+                [tool.get("function", {}).get("parameters", {}).get("x-route")]
+                + [
+                    branch.get("x-route")
+                    for branch in tool.get("function", {}).get("parameters", {}).get("oneOf", [])
+                    if isinstance(branch, dict)
+                ]
+            )
+        ):
+            return max(self.config.max_output_tokens, 4096)
         semantic_hints = set(
             strict_instruction_required_actions(state.domain, state.instruction)
         )

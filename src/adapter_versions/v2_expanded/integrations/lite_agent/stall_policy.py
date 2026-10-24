@@ -248,8 +248,20 @@ def detect_no_progress_stall(
         repeated_successful_actions = cycle_candidates
         repeated_operation_signatures = cycle_operation_signatures
 
+    search_results = [getattr(event, "result", None) for event in searches]
+    pure_search_cycle = (
+        len(searches) == window
+        and len(search_signatures) <= 2
+        and all(event.executed and not event.error for event in searches)
+        and all(isinstance(result, dict) and isinstance(result.get("matches"), list)
+                for result in search_results)
+        and len({json.dumps(result, sort_keys=True, default=str)
+                 for result in search_results}) == 1
+    )
     reason = None
-    if len(repeated_blocks) >= 3 and len(searches) >= 2:
+    if pure_search_cycle:
+        reason = "repeated_catalog_search_cycle"
+    elif len(repeated_blocks) >= 3 and len(searches) >= 2:
         reason = "repeated_action_search_cycle"
     elif len(repeated_blocks) >= 4:
         reason = "repeated_action_rejection_cycle"

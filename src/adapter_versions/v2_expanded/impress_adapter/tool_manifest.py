@@ -73,9 +73,25 @@ RGB_COLOR = {
     "oneOf": [
         {
             "type": "string",
+            "description": (
+                "Use a CSS color name or #RRGGBB. Prefer names for named colors; "
+                "for example yellow=#FFFF00, red=#FF0000, and LibreOffice palette green=#00A933. "
+                "Use #008000 only when CSS green is specifically requested. Integer "
+                "values use packed 24-bit RGB; 65535 is cyan (#00FFFF), while "
+                "yellow is 16776960 (#FFFF00)."
+            ),
             "pattern": (rf"^\s*(?:#[0-9A-Fa-f]{{6}}|{_NAMED_COLOR_PATTERN})\s*$"),
         },
-        {"type": "integer", "minimum": 0, "maximum": 16777215},
+        {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16777215,
+            "description": (
+                "Packed 24-bit RGB decimal. Yellow is 16776960; 65535 is cyan; "
+                "LibreOffice palette green is 43571 (#00A933). "
+                "A color name or #RRGGBB is easier to interpret."
+            ),
+        },
     ]
 }
 SELECTOR: dict[str, Any] = {
@@ -256,6 +272,35 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
         "required": [],
+    },
+    "presentation.create_summary_slide": {
+        "description": (
+            "Create one new blank summary slide from titles observed on existing slides. "
+            "Pass the exact source slide indices from presentation.inspect. The Adapter "
+            "copies their observed titles as a concise list, adds a title, and verifies "
+            "the new slide contains the selected items. It does not invent slide content."
+        ),
+        "properties": {
+            "slides": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 100,
+                "uniqueItems": True,
+                "items": SLIDE_INDEX,
+                "description": "Existing zero-based source slide indices copied from presentation.inspect.",
+            },
+            "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Insertion index; omit to append the summary slide.",
+            },
+            "title": {
+                **NONEMPTY_STRING,
+                "description": "Optional heading; defaults to Summary Slide.",
+            },
+        },
+        "required": ["slides"],
+        "additionalProperties": False,
     },
     "presentation.set_page_size": {
         "description": (
@@ -734,6 +779,37 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
             "layout": {"type": "integer", "minimum": 0},
         },
         "required": [],
+    },
+    "slides.create_from_images": {
+        "description": (
+            "Create one blank slide per observed image and insert that image in order. "
+            "Set replace_existing_slides=true when the request asks for a new image-only "
+            "presentation from the current template; this removes the template pages only "
+            "after every new slide and image has been created successfully. Save separately."
+        ),
+        "properties": {
+            "image_paths": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 100,
+                "items": {
+                    **NONEMPTY_STRING,
+                    "pattern": IMAGE_PATH_OR_FILE_URL_PATTERN,
+                },
+                "description": "Ordered list of exact local image paths observed from the instruction or filesystem discovery.",
+            },
+            "replace_existing_slides": {
+                "type": "boolean",
+                "description": "Whether to replace all current slides with the new image-only slides.",
+            },
+            "fit_mode": {
+                "type": "string",
+                "enum": ["original", "cover", "contain", "stretch"],
+                "default": "original",
+            },
+        },
+        "required": ["image_paths", "replace_existing_slides"],
+        "additionalProperties": False,
     },
     "slide.delete": {
         "properties": {"slide": SLIDE_INDEX},

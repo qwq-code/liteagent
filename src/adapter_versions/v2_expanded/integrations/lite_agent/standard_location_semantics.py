@@ -33,6 +33,7 @@ OUTPUT_PATH_FIELDS: dict[str, tuple[str, ...]] = {
     # selecting the lower-level command action.
     "command.run": ("stdout_path",),
     "command.capture_output": ("stdout_path",),
+    "archive.create_zip": ("archive_path",),
     "contacts.export_csv": ("output_path",),
     "document.convert": ("destination",),
     "document.create_from_json_values": ("output_path",),

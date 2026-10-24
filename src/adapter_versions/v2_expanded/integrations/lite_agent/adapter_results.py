@@ -1143,6 +1143,12 @@ def thunderbird_message_query_context(result: dict[str, Any]) -> dict[str, Any]:
         "returned_count": result.get("returned_count"),
         "select_from": result.get("select_from"),
         "order": result.get("order"),
+        "mailbox_indices": [
+            item.get("mailbox_index")
+            for item in messages
+            if isinstance(item.get("mailbox_index"), int)
+            and not isinstance(item.get("mailbox_index"), bool)
+        ],
         "messages": [],
         "messages_omitted": len(messages),
     }
@@ -1160,6 +1166,7 @@ def thunderbird_message_query_context(result: dict[str, Any]) -> dict[str, Any]:
         } | {
             "mailbox_index": message.get("mailbox_index"),
             "number_of_attachments": message.get("number_of_attachments"),
+            "starred": message.get("starred"),
             "attachment_names": [
                 str(name)[:100] for name in message.get("attachment_names", [])[:10]
             ]
@@ -1179,6 +1186,11 @@ def thunderbird_message_query_context(result: dict[str, Any]) -> dict[str, Any]:
         "Use the exact mailbox_index from each returned message. Include message_id only "
         "when that field is present; omit it when the mailbox has no Message-ID."
     )
+    if context["matched_count"] != context["returned_count"]:
+        context["selector_guidance"] += (
+            " The query did not return every matching message; do not apply a folder-wide "
+            "change until the remaining matches are queried."
+        )
     return context
 
 
@@ -3206,6 +3218,10 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
                 verification.get("passed") if isinstance(verification, dict) else None
             ),
         }
+    if domain == "vs_code" and action == "extension.install":
+        return {key: result[key] for key in (
+            "extension_id", "source_type", "already_installed", "changed", "guidance",
+        ) if key in result}
     if domain == "vs_code" and action == "debug.variables.read":
         variables = result.get("variables")
         if not isinstance(variables, dict) or not isinstance(

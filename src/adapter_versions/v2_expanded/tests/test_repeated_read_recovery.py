@@ -254,6 +254,61 @@ def test_identical_reads_still_reach_existing_stall_detection():
     assert stall["reason"] == "repeated_equivalent_read_cycle"
 
 
+def test_pure_identical_catalog_search_cycle_is_detected_without_failures():
+    events = [
+        ExecutionEvent(
+            step=step,
+            timestamp_utc="2026-09-06T00:00:00Z",
+            proposed={
+                "kind": "catalog",
+                "tool": "tools_search",
+                "arguments": {"query": "summary slide"},
+            },
+            executed=True,
+            result={"matches": [{"action": "presentation.inspect"}]},
+        )
+        for step in range(1, 9)
+    ]
+
+    stall = detect_no_progress_stall(events, window=8)
+
+    assert stall is not None
+    assert stall["reason"] == "repeated_catalog_search_cycle"
+    assert stall["failed_actions"] == 0
+
+
+@pytest.mark.parametrize(
+    ("queries", "results"),
+    [
+        (
+            ["same"] * 8,
+            [{"matches": []}, {"matches": [{"action": "presentation.inspect"}]}] * 4,
+        ),
+        (
+            [f"query-{step}" for step in range(8)],
+            [{"matches": [{"action": "presentation.inspect"}]}] * 8,
+        ),
+    ],
+)
+def test_search_cycles_with_new_results_or_queries_are_not_stalls(queries, results):
+    events = [
+        ExecutionEvent(
+            step=step,
+            timestamp_utc="2026-09-06T00:00:00Z",
+            proposed={
+                "kind": "catalog",
+                "tool": "tools_search",
+                "arguments": {"query": queries[step - 1]},
+            },
+            executed=True,
+            result=results[step - 1],
+        )
+        for step in range(1, 9)
+    ]
+
+    assert detect_no_progress_stall(events, window=8) is None
+
+
 @pytest.mark.parametrize("read_succeeds", [True, False])
 def test_soft_restart_stall_window_uses_only_the_current_retry(read_succeeds):
     agent, state, executor, proposal = setup_call()

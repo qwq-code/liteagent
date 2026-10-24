@@ -965,7 +965,13 @@ def validate_typed_matrix(value: Any) -> list[list[dict[str, Any]]]:
         if width is None:
             width = len(raw_row)
         elif len(raw_row) != width:
-            raise AdapterError("INVALID_REQUEST", "values must be rectangular")
+            raise AdapterError("INVALID_REQUEST", "values must be rectangular", {
+                "row_index": row_index, "expected_columns": width,
+                "actual_columns": len(raw_row),
+                "guidance": "Each matrix row must have the same width. A formula occupies one cell; "
+                "do not split '=' and the expression into separate cells. Use the documented typed "
+                "formula value or cells.set_formulas. No cells were written.",
+            })
         row: list[dict[str, Any]] = []
         for column_index, raw_cell in enumerate(raw_row):
             cell = _typed_cell(

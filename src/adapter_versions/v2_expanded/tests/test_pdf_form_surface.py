@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from types import SimpleNamespace
 
 import jsonschema
 import pytest
@@ -63,6 +64,26 @@ def _function(action: str, forwarded: bool) -> dict:
     return tools[0]["function"]
 
 
+def _route_params_schema(forwarded: dict) -> dict:
+    parameters = forwarded["parameters"]
+    if isinstance(parameters.get("x-route"), dict):
+        return parameters["properties"]["payload"]["properties"]["params"]
+    return parameters["oneOf"][0]["properties"]["payload"]["properties"]["params"]
+
+
+def _messages_without_gui(state: RuntimeState) -> list[dict]:
+    protocol = AgentProtocolMixin()
+    protocol.config = SimpleNamespace(include_gui=False)
+    return protocol._messages(state, b"synthetic-screenshot")
+
+
+def _summary_from_messages(messages: list[dict]) -> list[dict]:
+    """Read the execution summary from either API-only or GUI message layout."""
+    content = messages[-1]["content"]
+    state_text = content[0]["text"] if isinstance(content, list) else content
+    return json.loads(state_text.split("\n")[1])
+
+
 @pytest.mark.parametrize("domain", ["os", "multi_apps"])
 def test_pdf_form_inspection_and_fill_are_discoverable(domain: str) -> None:
     hits = search_actions(
@@ -80,7 +101,7 @@ def test_pdf_form_inspection_and_fill_are_discoverable(domain: str) -> None:
 def test_forwarded_pdf_form_schema_preserves_direct_contract(action: str) -> None:
     direct = _function(action, False)["parameters"]
     forwarded = _function(action, True)["parameters"]
-    nested = forwarded["oneOf"][0]["properties"]["payload"]["properties"]["params"]
+    nested = _route_params_schema({"parameters": forwarded})
     assert nested["properties"] == direct["properties"]
     assert nested["required"] == direct["required"]
     assert nested["additionalProperties"] == direct["additionalProperties"]
@@ -226,8 +247,8 @@ def test_pdf_form_inspection_keeps_observed_field_names_in_model_messages(
         events=[event],
     )
     mark_tool_result_for_audit(state, event)
-    messages = AgentProtocolMixin()._messages(state, b"synthetic-screenshot")
-    summary = json.loads(messages[2]["content"][0]["text"].split("\n")[1])
+    messages = _messages_without_gui(state)
+    summary = _summary_from_messages(messages)
     entry = next(item for item in summary if item.get("step") == 1)
     model_hint = entry["result"]["context_hint"]
     observed = model_hint["downstream_context"] if forwarded else model_hint
@@ -298,8 +319,8 @@ def test_pdf_form_compact_fields_keep_semantics_with_five_observations(
     )
     state.events.append(event)
     mark_tool_result_for_audit(state, event)
-    messages = AgentProtocolMixin()._messages(state, b"synthetic-screenshot")
-    summary = json.loads(messages[2]["content"][0]["text"].split("\n")[1])
+    messages = _messages_without_gui(state)
+    summary = _summary_from_messages(messages)
     entry = next(item for item in summary if item.get("step") == 5)
     hint = entry["result"]["context_hint"]
     observed = hint["downstream_context"] if forwarded else hint
@@ -373,8 +394,8 @@ def test_crowded_pdf_form_history_keeps_same_offset_recovery_and_smaller_page() 
         )
         state.events.append(event)
         mark_tool_result_for_audit(state, event)
-        messages = AgentProtocolMixin()._messages(state, b"synthetic-screenshot")
-        summary = json.loads(messages[2]["content"][0]["text"].split("\n")[1])
+        messages = _messages_without_gui(state)
+        summary = _summary_from_messages(messages)
         entry = next(item for item in summary if item.get("step") == event.step)
         return entry["result"]["context_hint"]
 

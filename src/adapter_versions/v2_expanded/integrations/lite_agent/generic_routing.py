@@ -160,32 +160,9 @@ def discovered_adapter_routes(state: Any) -> list[tuple[str, str]]:
     ]
     if latest_explicit:
         return latest_explicit[:1]
-    routes: list[tuple[str, str]] = []
-    for event in getattr(state, "events", ()) or ():
-        if not getattr(event, "executed", False):
-            continue
-        proposed = _proposal(event)
-        if proposed.get("kind") != "catalog":
-            continue
-        for match in _catalog_matches(event):
-            if not isinstance(match, dict) or match.get("action") != "adapter.call":
-                continue
-            adapter = match.get("adapter")
-            action = match.get("downstream_action")
-            if not isinstance(adapter, str) or adapter not in valid_domains:
-                continue
-            if not isinstance(action, str) or not action:
-                continue
-            if (
-                is_route(action, FORBIDDEN_DATASET_ACTIONS)
-                or _normalized_action(action) in _FORBIDDEN_ACTIONS_NORMALIZED
-                or action not in public_actions(adapter)
-            ):
-                continue
-            route = (adapter, action)
-            if route not in routes:
-                routes.append(route)
-    return routes
+    # The current search is the model's latest operation choice. Do not let
+    # older discovery hits reopen unrelated routes after an application switch.
+    return recovery_search_routes(state) or []
 
 
 def _latest_catalog_event(state: Any) -> Any | None:

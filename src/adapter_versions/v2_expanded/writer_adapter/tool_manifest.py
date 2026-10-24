@@ -236,6 +236,41 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "required": ["path"],
     },
+    "document.deduplicate_records": {
+        "description": (
+            "Remove later duplicate body paragraphs using one delimited field as the key. "
+            "The first occurrence is kept, original order and complete record text are "
+            "preserved, and blank paragraphs are kept by default. This is one bounded "
+            "document mutation: inspect the body first, choose the delimiter and zero-based "
+            "key_column from the observed records, then save/read back the result. It does "
+            "not sort records, rewrite fields, or infer a key."
+        ),
+        "properties": {
+            "delimiter": {
+                "type": "string", "minLength": 1, "maxLength": 1,
+                "pattern": r"[^\r\n]",
+                "description": "One character separating fields in each body paragraph, such as a comma.",
+            },
+            "key_column": {
+                "type": "integer", "minimum": 0,
+                "description": "Zero-based field number used to identify duplicates; choose from inspected records.",
+            },
+            "trim_key": {
+                "type": "boolean",
+                "description": "Trim surrounding key whitespace before comparing; defaults to true.",
+            },
+            "case_sensitive": {
+                "type": "boolean",
+                "description": "Whether key comparison preserves case; defaults to true.",
+            },
+            "skip_blank": {
+                "type": "boolean",
+                "description": "Keep blank paragraphs without treating them as records; defaults to true.",
+            },
+        },
+        "required": ["delimiter", "key_column"],
+        "additionalProperties": False,
+    },
     "document.extract_images": {
         "properties": {
             "source_path": {
@@ -563,6 +598,10 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
             "matches its first occurrence after the previous boundary. Only native "
             "paragraph breaks are inserted; existing characters and spaces stay unchanged. "
             "The caller selects every boundary; sentences are not detected automatically. "
+            "When separating sentences with an empty paragraph between adjacent sentences, "
+            "include only sentence-ending anchors that have another sentence after them. "
+            "Do not include the final sentence-ending anchor unless a trailing blank is "
+            "explicitly requested; that would add an unnecessary paragraph at the end. "
             "Returns the observed parts and each new right_paragraph_index. "
             "After splitting, the old index refers only to the left part. "
             "The original paragraph's text now spans the returned parts; when a right "
@@ -596,8 +635,10 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
                     'Exact case-sensitive literal or ordered list, e.g. [";", ";"] '
                     "splits after the first two semicolons, not every semicolon. Search "
                     "starts at the paragraph beginning, then resumes immediately after "
-                    "each match. Include existing spaces in an anchor to leave those "
-                    "spaces on the left. All anchors must match before any edit is made."
+                    "each match. For sentence separation, omit the final sentence-ending "
+                    "anchor unless a trailing blank is requested. Include existing spaces "
+                    "in an anchor to leave those spaces on the left. All anchors must match "
+                    "before any edit is made."
                 ),
             },
             "blank_paragraphs_between": {
@@ -806,6 +847,28 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
             **CHARACTER_FORMAT_PROPERTIES,
         },
         "required": ["paragraph_index", "start_offset", "end_offset", "expected_text"],
+        "additionalProperties": False,
+        "anyOf": [
+            {"required": [field]} for field in ("font_size", "bold", "italic", "script")
+        ],
+    },
+    "text.set_format_in_match": {
+        "description": (
+            "Apply character formatting to a zero-based, end-exclusive substring inside "
+            "one zero-based occurrence of a literal in body paragraphs. This action finds "
+            "the occurrence and resolves absolute paragraph offsets itself; use it when "
+            "formatting one character within a token such as the 2 in H2O. occurrence=0 "
+            "selects the first exact match across the document."
+        ),
+        "properties": {
+            "literal": {"type": "string", "minLength": 1},
+            "occurrence": {"type": "integer", "minimum": 0},
+            "match_start_offset": {"type": "integer", "minimum": 0},
+            "match_end_offset": {"type": "integer", "minimum": 1},
+            "case_sensitive": {"type": "boolean", "default": True},
+            **CHARACTER_FORMAT_PROPERTIES,
+        },
+        "required": ["literal", "occurrence", "match_start_offset", "match_end_offset"],
         "additionalProperties": False,
         "anyOf": [
             {"required": [field]} for field in ("font_size", "bold", "italic", "script")

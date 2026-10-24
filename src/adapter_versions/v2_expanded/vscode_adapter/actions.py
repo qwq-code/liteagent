@@ -265,6 +265,13 @@ class VscodeActions:
                 "source": source,
                 "source_type": "vsix" if vsix_path else "marketplace",
                 "already_installed": True,
+                "changed": False,
+                "guidance": (
+                    "This extension is already installed; no installation was performed. "
+                    "Inspect the current VS Code window before continuing. Installation "
+                    "does not prove activation, debugger readiness, or an active debug session. "
+                    "Do not repeat installation or click a previously observed dialog."
+                ),
                 **({"requested_source": requested_source, "resolution": resolution} if requested_source else {}),
             }
         argv = ["code", "--install-extension", str(source)]
@@ -306,6 +313,12 @@ class VscodeActions:
             "source": str(source),
             "source_type": "vsix" if vsix_path else "marketplace",
             "already_installed": False,
+            "changed": True,
+            "guidance": (
+                "The extension is installed on disk. Inspect the current VS Code window "
+                "and any activation or reload prompt before the next action. This result "
+                "does not confirm an active debugger or the contents of its variables view."
+            ),
             "stdout": result["stdout"],
             **({"requested_source": requested_source, "resolution": resolution} if requested_source else {}),
         }

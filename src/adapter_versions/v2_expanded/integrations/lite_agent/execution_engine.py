@@ -55,6 +55,7 @@ from .generic_routing import (
 )
 from .recovery_surface import last_failure_summary
 from .request_blocks import request_block_is_stale
+from .argument_handoff import argument_contract_errors as handoff_argument_errors
 from .context_projection import safe_action
 from .safety import sanitize_agent_visible_result, sanitize_gui_result_for_model
 from .tool_catalog import (
@@ -374,6 +375,23 @@ class ExecutionEngineMixin:
                         f"task-specific Adapter action is disabled in strict mode: {action}"
                     )
                 event.proposed.update({"kind": "adapter", "action": action})
+                # A stale call to a temporarily paused tool must retain the
+                # original rejection. This only rejects an already blocked
+                # exact request; it never bypasses schema validation or dispatch.
+                active_block = state.active_request_block(action, arguments)
+                if active_block is not None:
+                    raise RepeatedRequestBlocked({
+                        "type": "RepeatedActionBlocked",
+                        "detail": "this exact request is blocked; observe the current state and change the arguments or choose another action",
+                        "executed": False,
+                        "previous_step": active_block["blocked_at_step"],
+                        "previous_error": active_block.get("previous_error"),
+                        "blocked_action": action,
+                        "argument_signature": active_block["argument_signature"],
+                        "error_signature": active_block["error_signature"],
+                        "block_scope": active_block["block_scope"],
+                        "fallback_reason": "same_action_same_arguments_same_error_twice",
+                    })
                 if model_visible_tools is not None:
                     if not isinstance(model_visible_tools, list):
                         raise ValueError(
@@ -731,6 +749,7 @@ class ExecutionEngineMixin:
                 )
                 if action == "table.sort":
                     calc_semantics.validate_sort_arguments(state, action, arguments)
+                semantic_argument_errors.extend(handoff_argument_errors(state, action, arguments))
                 if semantic_argument_errors:
                     raise ValueError("; ".join(semantic_argument_errors))
                 if action == "media.extract_audio" and "profile" in arguments:
@@ -894,8 +913,10 @@ class ExecutionEngineMixin:
                     "status": "ok",
                     "executed": True,
                     "routing_guidance": (
-                        "Executable routes are listed below. Call one listed adapter route now; "
-                        "do not call tools_search again while a route is available."
+                        "These are candidate routes, not proof that a matching capability exists. "
+                        "Use a route only if its documented operation satisfies the needed step. "
+                        "If repeated searches return the same unsuitable candidates, change strategy "
+                        "or use an available GUI action; repeating the query adds no information."
                     ),
                     "matches": visible_matches,
                     "recovery": {

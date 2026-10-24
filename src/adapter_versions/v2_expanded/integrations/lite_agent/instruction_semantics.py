@@ -316,6 +316,32 @@ def requested_ordered_image_slides(instruction: str) -> dict[str, Any] | None:
     return {"slide_count": slide_count, "files": files}
 
 
+def requests_summary_slide(instruction: str) -> bool:
+    """Recognize the public Impress Summary Slide feature request."""
+    return bool(
+        re.search(r"(?i)\bsummary\s+slide\b", instruction)
+        and re.search(
+            r"(?i)\b(?:impress|presentation|powerpoint|pptx?|deck|slideshow)\b",
+            instruction,
+        )
+        and re.search(r"(?i)\b(?:create|make|use|add|summar(?:ize|y))\b", instruction)
+    )
+
+
+def requests_record_deduplication(instruction: str) -> bool:
+    """Recognize stable record/line de-duplication in a Writer document."""
+    return bool(
+        re.search(
+            r"(?i)\b(?:deduplicat(?:e|ed|ing)|remove\s+duplicat(?:e|ed|es)|keep\s+only\s+(?:the\s+)?(?:first|unique))\b",
+            instruction,
+        )
+        and re.search(
+            r"(?i)\b(?:records?|rows?|lines?|entries|ids?|identifiers?|train(?:s)?|duplicates?)\b",
+            instruction,
+        )
+    )
+
+
 def requested_sheet_names(instruction: str) -> list[str]:
     return REQUESTED_SHEET_RE.findall(instruction)
 
@@ -1512,6 +1538,22 @@ def requests_same_basename_export(instruction: str) -> bool:
     )
 
 
+def requested_max_system_volume(domain: str, instruction: str) -> bool:
+    """Recognize a qualitative request for the normal system volume ceiling."""
+    if domain != "os" or re.search(r"(?i)\b\d+(?:\.\d+)?\s*%", instruction):
+        return False
+    return bool(
+        re.search(r"(?i)\b(?:volume|sound|audio)\b", instruction)
+        and re.search(
+            r"(?i)\b(?:max(?:imum)?|full|all\s+the\s+way)\b|\bto\s+the\s+max\b",
+            instruction,
+        )
+        and re.search(
+            r"(?i)\b(?:turn|set|raise|increase|boost|up|volume)\b", instruction
+        )
+    )
+
+
 def instruction_required_actions(
     domain: str, instruction: str, *, strict_generic: bool = False
 ) -> list[str]:
@@ -1546,6 +1588,8 @@ def instruction_required_actions(
                 for action in actions
                 if action not in {"playback.find_local", "playback.open"}
             ]
+    if requested_max_system_volume(domain, instruction):
+        actions.append("audio.set_volume")
     actions.extend(vscode_configuration_semantics.required_actions(domain, instruction))
     actions.extend(workspace_open_semantics.required_actions(domain, instruction))
     if domain == "libreoffice_calc" and re.search(
@@ -1651,6 +1695,8 @@ def instruction_required_actions(
         instruction
     ):
         actions.append("image.insert_at_cursor")
+    if domain == "libreoffice_writer" and requests_record_deduplication(instruction):
+        actions.extend(["document.inspect", "document.deduplicate_records"])
     if domain == "libreoffice_impress":
         actions.extend(impress_page_number.required_actions(domain, instruction))
         # Audio insertion is a public Impress composition: inspect the live
@@ -1667,11 +1713,20 @@ def instruction_required_actions(
                 else ["presentation.inspect", "shape.format_text"]
             )
         if requested_ordered_image_slides(instruction) is not None:
-            if not strict_generic:
-                actions.extend(["slide.delete", "shape.delete"])
-            # Cleanup is a choice based on the live template, not an obligation
-            # to execute both deletion strategies before completing the deck.
-            actions.extend(["slide.create", "shape.insert_image"])
+            if strict_generic:
+                # A new image-only deck is one atomic composition.  Exposing
+                # slide creation and image insertion separately lets a model
+                # retain template placeholders, producing the wrong shape
+                # count even when every individual call succeeds.
+                actions.append("slides.create_from_images")
+            else:
+                if not strict_generic:
+                    actions.extend(["slide.delete", "shape.delete"])
+                # Cleanup is a choice based on the live template, not an obligation
+                # to execute both deletion strategies before completing the deck.
+                actions.extend(["slide.create", "shape.insert_image"])
+        if requests_summary_slide(instruction):
+            actions.extend(["presentation.inspect", "presentation.create_summary_slide"])
         if requested_slide_note(instruction) is not None and role_text_update is None:
             actions.append("slide.set_notes")
         if requested_title_to_notes(instruction) is not None:
@@ -1789,6 +1844,8 @@ __all__ = [
     "requested_numbered_desktop_files",
     "requested_blank_slide_count",
     "requested_ordered_image_slides",
+    "requests_summary_slide",
+    "requests_record_deduplication",
     "requested_sheet_names",
     "requested_annual_percentage_change_summary",
     "requested_monthly_column_totals_summary",
@@ -1843,6 +1900,7 @@ __all__ = [
     "requests_vscode_keybinding_disable",
     "requested_calc_export_format",
     "requests_same_basename_export",
+    "requested_max_system_volume",
     "instruction_required_actions",
     "strict_instruction_required_actions",
     "requested_column_order",

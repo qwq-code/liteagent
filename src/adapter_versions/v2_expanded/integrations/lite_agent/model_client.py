@@ -596,6 +596,25 @@ def _schema_validation_hints(
     return tuple(hints)
 
 
+def _argument_envelope_hints(
+    tool: str, arguments: dict[str, Any], schema: dict[str, Any], *, atomic: bool = False
+) -> tuple[str, ...]:
+    """Explain misplaced envelopes without accepting or rewriting invalid calls."""
+    properties = schema.get("properties", {})
+    if tool in arguments and tool not in properties:
+        return (
+            "<root>: the function name is already selected; do not use it as an argument key. Regenerate only its parameter object.",
+        )
+    if atomic and any(key in arguments and key not in properties for key in (
+        "adapter", "action", "payload", "params", "arguments", "adapter__adapter_call"
+    )):
+        return (
+            "<root>: this is an atomic function, not adapter.call. Regenerate its flat parameters; do not include route or call envelopes.",
+            "<root>: select a different currently exposed function if you intend a different operation; a nested action cannot change this function's operation.",
+        )
+    return ()
+
+
 class StructuredToolProtocolError(RuntimeError):
     """A model response cannot be safely represented as one complete tool call.
 
@@ -700,52 +719,39 @@ class StructuredToolModelClient:
                 raise ValueError(
                     "enable_thinking does not match the requested reasoning mode"
                 )
-        # Some local OpenAI-compatible models keep emitting a stale catalog
-        # function after the surface has advanced to one executable Adapter
-        # route. Pin only that unambiguous route at the provider boundary;
-        # the model still supplies the route arguments and terminal controls
-        # remain available on surfaces with more than one executable choice.
+        # Keep native tool-call selection even for a single available function.
+        # Some OpenAI-compatible Qwen servers treat named forcing as raw argument
+        # generation, returning call envelopes inside arguments instead of the
+        # declared parameter object. "required" still restricts selection to the
+        # current surface; every returned name and argument is validated below.
         provider_surface, atomic_bindings = atomic_provider_surface(tools)
-        exposed_function_names = [
-            tool.get("function", {}).get("name")
-            for tool in provider_surface
-            if isinstance(tool.get("function"), dict)
-        ]
-        adapter_function_names = [
-            name
-            for name in exposed_function_names
-            if isinstance(name, str) and name.startswith(("adapter__", "atomic__"))
-        ]
-        force_single_adapter = (
-            len(adapter_function_names) == 1
-            and "tools_search" not in exposed_function_names
-        )
         tool_choice: Any = "required"
-        if force_single_adapter:
-            tool_choice = {
-                "type": "function",
-                "function": {"name": "adapter_call" if adapter_function_names[0] == "adapter__adapter_call" else adapter_function_names[0]},
-            }
-        provider_messages = messages
+        guidance = (
+            "Tool call serialization: choose a function from the current tools list. "
+            "Its arguments object contains only fields declared by that function. "
+            "Do not nest arguments under the function name or an action/arguments envelope. "
+            "Earlier execution records are history, not templates for the next call."
+        )
         if atomic_bindings:
-            guidance = (
+            guidance += (
+                " "
                 "For this turn, each atomic__ tool is one discovered adapter operation. "
                 "Use its current schema: action parameters go at the top level, with optional "
                 "request_options for document, target, verify or timeout_ms. Historical "
                 "adapter.call/payload.params examples use the internal logging format. "
                 "Choose one current tool and do not chain operations."
             )
-            # Qwen's chat template permits system instructions only at the
-            # beginning. Do not append a second system turn after observations.
-            provider_messages = copy.deepcopy(messages)
-            if provider_messages and provider_messages[0].get("role") == "system":
-                content = provider_messages[0].get("content", "")
-                if isinstance(content, list):
-                    provider_messages[0]["content"] = [*content, {"type": "text", "text": guidance}]
-                else:
-                    provider_messages[0]["content"] = str(content) + "\n\n" + guidance
+        # Keep one leading system message for Qwen's chat template, including
+        # direct adapter calls which can also acquire a spurious name wrapper.
+        provider_messages = copy.deepcopy(messages)
+        if provider_messages and provider_messages[0].get("role") == "system":
+            content = provider_messages[0].get("content", "")
+            if isinstance(content, list):
+                provider_messages[0]["content"] = [*content, {"type": "text", "text": guidance}]
             else:
-                provider_messages.insert(0, {"role": "system", "content": guidance})
+                provider_messages[0]["content"] = str(content) + "\n\n" + guidance
+        else:
+            provider_messages.insert(0, {"role": "system", "content": guidance})
         request = {
             "model": model,
             "messages": provider_messages,
@@ -888,7 +894,8 @@ class StructuredToolModelClient:
                     response_snapshot=self._response_snapshot(response, choice, message),
                     tool_name=tool,
                     missing_fields=_safe_missing_fields(actionable_errors),
-                    schema_hints=_schema_validation_hints(actionable_errors, instance=arguments),
+                    schema_hints=(_argument_envelope_hints(tool, arguments, atomic_schema, atomic=True)
+                                  + _schema_validation_hints(actionable_errors, instance=arguments))[:_SCHEMA_HINT_MAX],
                 )
             arguments = restore_adapter_arguments(arguments, binding)
             arguments_raw = json.dumps(arguments, ensure_ascii=False)
@@ -941,10 +948,10 @@ class StructuredToolModelClient:
                 response_snapshot=self._response_snapshot(response, choice, message),
                 tool_name=tool,
                 missing_fields=_safe_missing_fields(actionable_errors),
-                schema_hints=_schema_validation_hints(
+                schema_hints=(_argument_envelope_hints(tool, arguments, schema) + _schema_validation_hints(
                     actionable_errors,
                     instance=arguments,
-                ),
+                ))[:_SCHEMA_HINT_MAX],
             )
         finish_reason = choice.finish_reason
         if finish_reason == "stop":

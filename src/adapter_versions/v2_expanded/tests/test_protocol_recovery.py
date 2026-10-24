@@ -18,6 +18,7 @@ from integrations.lite_agent.model_client import (
 )
 from integrations.lite_agent.reasoning import extract_reasoning_effort_enum
 from integrations.lite_agent.state_model import ExecutionEvent, RuntimeState
+from integrations.lite_agent.tool_catalog import build_tools
 from scripts.run_lite_agent_pilot import (
     model_preflight_failure,
     protocol_recovery_after_error,
@@ -797,6 +798,29 @@ def test_truncated_protocol_recovery_gets_bounded_extra_output_budget() -> None:
     assert client.calls[0]["output_token_budget"] == 4096
 
 
+@pytest.mark.parametrize("action", ["range.write", "cells.set_formulas"])
+def test_direct_calc_matrix_writes_receive_bounded_json_output_budget(action: str) -> None:
+    class _BudgetProbe(AgentProtocolMixin):
+        config = SimpleNamespace(max_output_tokens=384)
+
+        def tools(self, state: RuntimeState) -> list[dict[str, Any]]:
+            return build_tools(
+                state.domain,
+                [action],
+                include_gui=False,
+                include_control_tools=False,
+                strict_generic=True,
+            )
+
+    state = RuntimeState(
+        task_id="synthetic-calc-token-budget",
+        domain="libreoffice_calc",
+        instruction="Write formulas into the spreadsheet cells.",
+    )
+
+    assert _BudgetProbe().output_token_budget(state) == 4096
+
+
 def test_complete_tool_call_is_accepted_when_reasoning_finish_is_length() -> None:
     arguments = '{"sheet":"Sheet1","range":"A1:A1","values":[["ok"]]}'
     client = _model_client([_tool_call(arguments)], "length")
@@ -844,7 +868,8 @@ def test_same_tool_batch_requires_replanning_from_latest_state_and_tools() -> No
     assert len(transport.requests) == 2
     assert proposal['tool'] == 'inspect_current'
     assert proposal['arguments_raw'] == '{}'
-    assert transport.requests[-1]['messages'] == arguments['messages']
+    assert transport.requests[-1]['messages'][1:] == arguments['messages']
+    assert transport.requests[-1]['messages'][0]['role'] == 'system'
 
 
 def test_mixed_tool_batch_remains_rejected() -> None:

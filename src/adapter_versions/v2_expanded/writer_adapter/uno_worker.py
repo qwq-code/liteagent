@@ -23,8 +23,9 @@ from .native_references import (
     paragraph_numbering_state,
 )
 from .pdf_export import preserve_docx_soft_wrap_spaces
+from .paragraph_dedup import plan_paragraph_deduplication
 from .schema import TAB_STOP_UNITS, parse_rgb_color
-from .text_format import set_text_format
+from .text_format import set_text_format, set_text_format_in_match
 from .text_search import find_text
 
 
@@ -2220,6 +2221,95 @@ def _append_paragraphs(
     }
 
 
+def _deduplicate_records(
+    session: WriterSession, params: dict[str, Any]
+) -> dict[str, Any]:
+    """Remove later body records with an already-seen delimited key.
+
+    The whole plan is computed before mutation.  Removing from the end keeps
+    the observed paragraph indices stable and avoids a read/search/delete loop
+    that can silently leave duplicate records after an earlier deletion.
+    """
+    text = session.doc.Text
+    before = [str(paragraph.String) for paragraph in _paragraphs(text)]
+    try:
+        plan = plan_paragraph_deduplication(
+            before,
+            delimiter=params["delimiter"],
+            key_column=params["key_column"],
+            trim_key=params.get("trim_key", True),
+            case_sensitive=params.get("case_sensitive", True),
+            skip_blank=params.get("skip_blank", True),
+        )
+    except (KeyError, ValueError) as exc:
+        raise AdapterError("INVALID_REQUEST", str(exc)) from exc
+
+    removed: list[int] = []
+    for original_index in reversed(plan["remove_indices"]):
+        current = _paragraphs(text)
+        if original_index >= len(current):
+            raise AdapterError(
+                "VERIFICATION_FAILED",
+                "paragraph indices changed while removing duplicate records",
+                {"index": original_index, "paragraph_count": len(current)},
+            )
+        paragraph = current[original_index]
+        cursor = text.createTextCursorByRange(paragraph.getStart())
+        if original_index + 1 < len(current):
+            # Include this paragraph's terminating boundary, leaving the next
+            # paragraph as a separate item at the removed row's former index.
+            cursor.gotoRange(current[original_index + 1].getStart(), True)
+        elif original_index > 0:
+            # For a final duplicate, remove its leading boundary and content so
+            # no synthetic blank record remains at the end of the document.
+            cursor = text.createTextCursorByRange(current[original_index - 1].getEnd())
+            cursor.gotoRange(paragraph.getEnd(), True)
+        else:
+            raise AdapterError(
+                "VERIFICATION_FAILED",
+                "cannot remove the only remaining document paragraph",
+            )
+        cursor.String = ""
+        removed.append(original_index)
+
+    after = [str(paragraph.String) for paragraph in _paragraphs(text)]
+    try:
+        remaining = plan_paragraph_deduplication(
+            after,
+            delimiter=params["delimiter"],
+            key_column=params["key_column"],
+            trim_key=params.get("trim_key", True),
+            case_sensitive=params.get("case_sensitive", True),
+            skip_blank=params.get("skip_blank", True),
+        )
+    except ValueError as exc:
+        raise AdapterError("VERIFICATION_FAILED", str(exc)) from exc
+    if remaining["remove_indices"]:
+        raise AdapterError(
+            "VERIFICATION_FAILED",
+            "duplicate record removal did not leave unique keys",
+            {"remaining_duplicate_indices": remaining["remove_indices"]},
+        )
+    expected_count = len(before) - len(plan["remove_indices"])
+    if len(after) != expected_count:
+        raise AdapterError(
+            "VERIFICATION_FAILED",
+            "duplicate record removal changed unexpected paragraph boundaries",
+            {
+                "expected_paragraph_count": expected_count,
+                "observed_paragraph_count": len(after),
+            },
+        )
+    return {
+        **plan,
+        "removed_indices": sorted(removed),
+        "paragraph_count_before": len(before),
+        "paragraph_count_after": len(after),
+        "paragraphs": after,
+        "order_preserved": True,
+    }
+
+
 def _apply_paragraph_format_fields(paragraph: Any, params: dict[str, Any]) -> None:
     alignment = {"left": 0, "right": 1, "justify": 2, "center": 3}
     if "line_spacing" in params:
@@ -2374,6 +2464,7 @@ def _split_paragraph(session: WriterSession, params: dict[str, Any]) -> dict[str
     original_text = str(paragraph.String)
     boundaries = []
     cursors = []
+    insert_counts = []
     expected = []
     search_start = 0
     for anchor_index, anchor in enumerate(anchors):
@@ -2392,32 +2483,40 @@ def _split_paragraph(session: WriterSession, params: dict[str, Any]) -> dict[str
                 404,
             )
         split_offset = start + len(anchor)
+        # A blank paragraph is a gap between pieces. Do not create a trailing
+        # empty paragraph when the final anchor ends the source paragraph.
+        trailing_boundary = (
+            anchor_index == len(anchors) - 1 and split_offset == len(original_text)
+        )
+        insert_count = 0 if trailing_boundary else blank_between + 1
         cursor = _explicit_range(
             paragraph, start_offset=start, end_offset=split_offset, expected_text=anchor
         )
         cursor.collapseToEnd()
         cursors.append(cursor)
+        insert_counts.append(insert_count)
         boundaries.append(
             {
                 "after_text": anchor,
                 "split_offset": split_offset,
                 "right_paragraph_index": index
-                + (anchor_index + 1) * (blank_between + 1),
+                + sum(insert_counts),
             }
         )
-        expected.extend(
-            [original_text[search_start:split_offset], *([""] * blank_between)]
-        )
+        expected.append(original_text[search_start:split_offset])
+        if insert_count:
+            expected.extend([""] * blank_between)
         search_start = split_offset
-    expected.append(original_text[search_start:])
+    if search_start < len(original_text):
+        expected.append(original_text[search_start:])
 
     # Resolve every range before editing, then preserve earlier offsets by working back.
     text = paragraph.getText()
-    for cursor in reversed(cursors):
-        for _ in range(blank_between + 1):
+    for cursor, insert_count in reversed(list(zip(cursors, insert_counts, strict=True))):
+        for _ in range(insert_count):
             text.insertControlCharacter(cursor, 0, False)
     after = _paragraphs(session.doc.Text)
-    added_paragraphs = len(anchors) * (blank_between + 1)
+    added_paragraphs = sum(insert_counts)
     right_index = index + added_paragraphs
     observed = [str(item.String) for item in after[index : right_index + 1]]
     if len(after) != len(paragraphs) + added_paragraphs or observed != expected:
@@ -2871,6 +2970,7 @@ def _set_default_font(session: WriterSession, params: dict[str, Any]) -> dict[st
 
 GENERIC_ACTIONS = {
     "document.inspect": _inspect,
+    "document.deduplicate_records": _deduplicate_records,
     "document.save": _save_action,
     "document.export_pdf": _export_pdf,
     "document.set_font": _set_font,
@@ -2889,6 +2989,7 @@ GENERIC_ACTIONS = {
     "text.find": find_text,
     "text.find_replace": _find_replace,
     "text.set_format": set_text_format,
+    "text.set_format_in_match": set_text_format_in_match,
     "table.read": _read_table,
     "table.convert_text": _convert_text_to_table,
     "table.insert_at_cursor": _insert_table_at_cursor,

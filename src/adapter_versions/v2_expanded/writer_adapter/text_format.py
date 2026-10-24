@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .errors import AdapterError
 from .native_references import _explicit_range, _paragraph_at
+
+CHARACTER_FORMAT_FIELDS = {"font_size", "bold", "italic", "script"}
 
 
 def _enum_name(value: Any) -> str:
@@ -87,4 +90,63 @@ def set_text_format(session: Any, params: dict[str, Any]) -> dict[str, Any]:
         "text": params["expected_text"],
         "format": observed,
         "text_unchanged": True,
+    }
+
+
+def set_text_format_in_match(session: Any, params: dict[str, Any]) -> dict[str, Any]:
+    """Format a caller-selected subrange inside a selected literal occurrence."""
+    from .text_search import _body_paragraphs
+
+    literal = params["literal"]
+    flags = 0 if params.get("case_sensitive", True) else re.IGNORECASE
+    pattern = re.compile(re.escape(literal), flags)
+    occurrence = int(params["occurrence"])
+    selected: tuple[int, int, str] | None = None
+    seen = 0
+    for paragraph_index, paragraph in enumerate(_body_paragraphs(session.doc)):
+        paragraph_text = str(paragraph.String)
+        for match in pattern.finditer(paragraph_text):
+            if seen == occurrence:
+                selected = (paragraph_index, match.start(), match.group())
+                break
+            seen += 1
+        if selected is not None:
+            break
+    if selected is None:
+        raise AdapterError(
+            "TEXT_MATCH_NOT_FOUND",
+            "the selected literal occurrence does not exist in body paragraphs",
+            {"literal": literal, "occurrence": occurrence, "matches_seen": seen},
+            404,
+        )
+
+    paragraph_index, match_start, matched_text = selected
+    relative_start = int(params["match_start_offset"])
+    relative_end = int(params["match_end_offset"])
+    expected_text = matched_text[relative_start:relative_end]
+    if not expected_text or relative_end > len(matched_text):
+        raise AdapterError(
+            "INVALID_REQUEST",
+            "selected match offsets must identify a non-empty substring inside the literal",
+            {
+                "match_length": len(matched_text),
+                "match_start_offset": relative_start,
+                "match_end_offset": relative_end,
+            },
+        )
+    absolute = {
+        "paragraph_index": paragraph_index,
+        "start_offset": match_start + relative_start,
+        "end_offset": match_start + relative_end,
+        "expected_text": expected_text,
+        **{key: value for key, value in params.items() if key in CHARACTER_FORMAT_FIELDS},
+    }
+    result = set_text_format(session, absolute)
+    return {
+        **result,
+        "literal": literal,
+        "occurrence": occurrence,
+        "matched_text": matched_text,
+        "match_start_offset": relative_start,
+        "match_end_offset": relative_end,
     }

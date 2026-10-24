@@ -77,8 +77,20 @@ def test_single_action_has_flat_parameters_and_lossless_request_metadata():
     assert result["tool"] == "adapter__adapter_call"
     assert result["provider_tool"] == name
     assert json.loads(result["provider_arguments_raw"]) == arguments
-    assert request["tool_choice"]["function"]["name"] == name
+    assert request["tool_choice"] == "required"
     assert tools == before
+
+
+@pytest.mark.parametrize("alternative", ["propose_done", "fail_task", "gui_action", "tools_search"])
+def test_single_adapter_does_not_disable_available_alternatives(alternative):
+    tools = wrapper()
+    tools.append({"type": "function", "function": {
+        "name": alternative, "description": "Synthetic alternative",
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    }})
+    result, request = client_call(tools, alternative, {})
+    assert request["tool_choice"] == "required"
+    assert result["tool"] == alternative
 
 
 @pytest.mark.parametrize("arguments", [
@@ -130,16 +142,54 @@ def test_old_route_alias_does_not_enable_a_different_operation():
     assert result["tool"] == "adapter__adapter_call"
 
 
-def test_ambiguous_untyped_and_reference_contracts_keep_wrapper():
+def test_correlated_typed_routes_become_separate_atomic_tools():
     tools = build_tools("multi_apps", ["adapter.call"], include_gui=False,
                         include_control_tools=False, strict_generic=True)
     alternatives = constrain_adapter_call_routes(tools, [
         ("os", "filesystem.find"), ("os", "archive.create_zip"),
     ])
-    for original in (tools, alternatives):
-        surface, bindings = atomic_provider_surface(original)
-        assert surface == original
-        assert not bindings
+    surface, bindings = atomic_provider_surface(alternatives)
+    assert [tool["function"]["name"] for tool in surface] == list(bindings)
+    assert len(surface) == 2
+    assert {binding["action"] for binding in bindings.values()} == {
+        "filesystem.find", "archive.create_zip",
+    }
+    for function_tool in surface:
+        function = function_tool["function"]
+        assert "payload" not in function["parameters"]["properties"]
+        assert Draft202012Validator(function["parameters"]).check_schema(
+            function["parameters"]
+        ) is None
+    find_name = next(
+        name for name, binding in bindings.items()
+        if binding["action"] == "filesystem.find"
+    )
+    find_arguments = {"roots": ["/tmp"], "name_patterns": ["*.pdf"]}
+    find_result, _ = client_call(alternatives, find_name, find_arguments)
+    restored_find = json.loads(find_result["arguments_raw"])
+    assert restored_find["adapter"] == "os"
+    assert restored_find["action"] == "filesystem.find"
+    assert restored_find["payload"]["params"] == find_arguments
+
+    zip_name = next(
+        name for name, binding in bindings.items()
+        if binding["action"] == "archive.create_zip"
+    )
+    zip_arguments = {
+        "archive_path": "/tmp/result.zip", "input_paths": ["/tmp/input.txt"],
+    }
+    zip_result, _ = client_call(alternatives, zip_name, zip_arguments)
+    restored_zip = json.loads(zip_result["arguments_raw"])
+    assert restored_zip["adapter"] == "os"
+    assert restored_zip["action"] == "archive.create_zip"
+    assert restored_zip["payload"]["params"] == zip_arguments
+    assert alternatives == constrain_adapter_call_routes(tools, [
+        ("os", "filesystem.find"), ("os", "archive.create_zip"),
+    ])
+
+    surface, bindings = atomic_provider_surface(tools)
+    assert surface == tools
+    assert not bindings
     fixed = wrapper()
     fixed[0]["function"]["parameters"]["properties"]["payload"]["properties"]["params"]["$ref"] = "#/$defs/params"
     assert atomic_provider_surface(fixed) == (fixed, {})

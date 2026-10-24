@@ -142,7 +142,7 @@ def test_project_discovery_survives_compound_document_search(query, excluded_rou
         ("libreoffice writer open new document", ("os", "terminal.launch")),
         (
             "libreoffice_writer document create new document adapter action",
-            ("os", "terminal.launch"),
+            ("libreoffice_writer", "document.create"),
         ),
         ("open /tmp/draft.odt", ("os", "desktop.open_path")),
         ("document.save", ("libreoffice_writer", "document.save")),

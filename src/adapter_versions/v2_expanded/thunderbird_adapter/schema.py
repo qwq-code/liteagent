@@ -23,6 +23,7 @@ ACTIONS = frozenset(
         "messages.export_eml",
         "contacts.export_csv",
         "messages.query",
+        "messages.update_flags",
         "attachments.save",
         "accounts.remove",
         "compose.attach",
@@ -39,6 +40,7 @@ VERIFY_TYPES = frozenset(
         "exported_eml",
         "exported_contacts",
         "attachment_file",
+        "message_flags",
         "account_removed",
         "accessibility",
     }
@@ -284,6 +286,34 @@ def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
             )
         if "overwrite" in params and not isinstance(params["overwrite"], bool):
             raise AdapterError("INVALID_REQUEST", "params.overwrite must be a boolean")
+    elif action == "messages.update_flags":
+        _string(params, "folder_name")
+        allowed = {"folder_name", "mailbox_indices", "flag", "value"}
+        unexpected = sorted(set(params).difference(allowed))
+        if unexpected:
+            raise AdapterError(
+                "INVALID_REQUEST",
+                f"messages.update_flags received unsupported parameters: {unexpected}",
+            )
+        indices = params.get("mailbox_indices")
+        if (
+            not isinstance(indices, list)
+            or not indices
+            or any(isinstance(index, bool) or not isinstance(index, int) or index < 0 for index in indices)
+            or len(set(indices)) != len(indices)
+            or len(indices) > 500
+        ):
+            raise AdapterError(
+                "INVALID_REQUEST",
+                "params.mailbox_indices must be a non-empty array of unique non-negative integers from messages.query",
+            )
+        if params.get("flag") != "starred":
+            raise AdapterError(
+                "INVALID_REQUEST",
+                "params.flag must be 'starred'",
+            )
+        if not isinstance(params.get("value"), bool):
+            raise AdapterError("INVALID_REQUEST", "params.value must be a boolean")
     elif action == "accounts.remove":
         _string(params, "email")
         if "hostname" in params:

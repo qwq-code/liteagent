@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -332,7 +333,9 @@ def test_debug_picker_returns_promptly_and_reaches_model_feedback(monkeypatch) -
         instruction="Inspect the current program in its debugger.", events=[event],
     )
     mark_tool_result_for_audit(runtime, event)
-    messages = AgentProtocolMixin()._messages(runtime, b"png")
+    protocol = AgentProtocolMixin()
+    protocol.config = SimpleNamespace(include_gui=False)
+    messages = protocol._messages(runtime, b"png")
     projected = json.dumps(messages, ensure_ascii=True)
     assert "Select launch configuration" in projected
     assert "Attach to process" in projected
@@ -380,7 +383,9 @@ def test_debug_start_verification_reports_transition_without_changing_verdict(
         instruction="Inspect the running program.", events=[event],
     )
     mark_tool_result_for_audit(state, event)
-    projected = json.dumps(AgentProtocolMixin()._messages(state, b"png"))
+    protocol = AgentProtocolMixin()
+    protocol.config = SimpleNamespace(include_gui=False)
+    projected = json.dumps(protocol._messages(state, b"png"))
     assert "started_then_ended" in projected
     assert "debug.breakpoint.set" in projected
     assert "before its line executes" in projected
