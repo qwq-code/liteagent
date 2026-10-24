@@ -580,6 +580,18 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
                     "copied from desktop.applications.inspect. Names are not resolved."
                 ),
             },
+            "mime_type_prefixes": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "uniqueItems": True,
+                "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.+-]*$"},
+                "description": (
+                    "MIME categories selected by the model, such as audio or image. "
+                    "Expands all matching types advertised by desktop_id and verifies "
+                    "each association. Mutually exclusive with mime_types."
+                ),
+            },
             "mime_types": {
                 "type": "array",
                 "minItems": 1,
@@ -591,11 +603,50 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
                 },
                 "description": (
                     "Exact MIME types selected by the model. Every type must be "
-                    "advertised by desktop_id; no category expansion occurs."
+                    "advertised by desktop_id. Mutually exclusive with mime_type_prefixes."
                 ),
             },
         },
-        "required": ["desktop_id", "mime_types"],
+        "required": ["desktop_id"],
+        # Keep branches self-contained for native tool grammar compilation.
+        "oneOf": [
+            {
+                "type": "object",
+                "properties": {
+                    "desktop_id": {**NONEMPTY_STRING, "pattern": "^[^/]+\\.desktop$"},
+                    "mime_types": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "uniqueItems": True,
+                        "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*$",
+                        },
+                    },
+                },
+                "required": ["desktop_id", "mime_types"],
+                "additionalProperties": False,
+            },
+            {
+                "type": "object",
+                "properties": {
+                    "desktop_id": {**NONEMPTY_STRING, "pattern": "^[^/]+\\.desktop$"},
+                    "mime_type_prefixes": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "uniqueItems": True,
+                        "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9.+-]*$",
+                        },
+                    },
+                },
+                "required": ["desktop_id", "mime_type_prefixes"],
+                "additionalProperties": False,
+            },
+        ],
     },
     "audio.set_volume": {
         "properties": {

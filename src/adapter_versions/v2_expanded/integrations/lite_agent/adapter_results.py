@@ -3209,11 +3209,11 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
             ),
             "applications": applications,
             "guidance": (
-                "Choose an exact desktop_id and a bounded batch of exact advertised "
-                "mime_types from this read-only result before calling "
-                "desktop.mime_associations.set. When an application reports a non-null "
-                "next_mime_offset, inspect that next page explicitly before deciding "
-                "whether the requested category is complete."
+                "Choose an exact desktop_id before calling desktop.mime_associations.set. "
+                "For a whole MIME category, select mime_type_prefixes to expand all "
+                "matching types advertised by that application. For individual types, "
+                "select a bounded mime_types list; next_mime_offset allows inspecting "
+                "further types. Verification of an exact list covers only that list."
             ),
         }
     if domain == "os" and action == "desktop.mime_associations.set":

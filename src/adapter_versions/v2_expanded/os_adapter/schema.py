@@ -563,7 +563,7 @@ def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
         if "max_mime_types_per_application" in params:
             _integer(params, "max_mime_types_per_application", 1, 20)
     elif action == "desktop.mime_associations.set":
-        allowed = {"desktop_id", "mime_types"}
+        allowed = {"desktop_id", "mime_types", "mime_type_prefixes"}
         unexpected = sorted(set(params) - allowed)
         if unexpected:
             raise AdapterError(
@@ -576,22 +576,29 @@ def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
             raise AdapterError(
                 "INVALID_REQUEST", "params.desktop_id must be an exact Desktop Entry ID"
             )
-        values = _string_list(params, "mime_types")
+        if ("mime_types" in params) == ("mime_type_prefixes" in params):
+            raise AdapterError(
+                "INVALID_REQUEST", "select exactly one of mime_types or mime_type_prefixes"
+            )
+        field = "mime_types" if "mime_types" in params else "mime_type_prefixes"
+        values = _string_list(params, field)
+        pattern = (
+            r"^[a-z0-9][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*$"
+            if field == "mime_types"
+            else r"^[a-z0-9][a-z0-9.+-]*$"
+        )
         if (
             len(values) > 20
             or len(values) != len(set(values))
             or any(
-                re.fullmatch(
-                    r"^[a-z0-9][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*$",
-                    value.casefold(),
-                )
+                re.fullmatch(pattern, value.casefold() if field == "mime_types" else value)
                 is None
                 for value in values
             )
         ):
             raise AdapterError(
                 "INVALID_REQUEST",
-                "params.mime_types must contain unique exact MIME types",
+                f"params.{field} must contain unique valid MIME selectors (at most 20)",
             )
     elif action == "desktop.set_accessibility_scale":
         if "magnifier_factor" in params:

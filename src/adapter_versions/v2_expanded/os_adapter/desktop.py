@@ -201,7 +201,7 @@ def set_mime_associations(
     timeout: float,
     directories: Iterable[Path] | None = None,
 ) -> dict[str, Any]:
-    """Set only the exact Desktop ID and MIME values selected by the model."""
+    """Set model-selected exact types or advertised categories for one Desktop ID."""
     desktop_id = params["desktop_id"]
     matches = [
         entry
@@ -216,7 +216,18 @@ def set_mime_associations(
             404,
         )
     entry = matches[0]
-    selected = sorted(set(params["mime_types"]))
+    if "mime_types" in params:
+        selected = sorted(set(params["mime_types"]))
+    else:
+        prefixes = tuple(f"{prefix}/" for prefix in params["mime_type_prefixes"])
+        selected = sorted(mime for mime in entry.mime_types if mime.startswith(prefixes))
+    if not selected:
+        raise AdapterError(
+            "MIME_TYPES_NOT_ADVERTISED",
+            "the selected Desktop Entry advertises no matching MIME types",
+            {"desktop_id": entry.desktop_id},
+            422,
+        )
     advertised = set(entry.mime_types)
     unsupported = sorted(set(selected) - advertised)
     if unsupported:

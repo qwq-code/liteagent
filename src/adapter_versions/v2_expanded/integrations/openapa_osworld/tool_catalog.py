@@ -432,9 +432,10 @@ DOMAIN_SIGNATURES = {
             "inspection of installed Desktop Entries and their advertised MIME types"
         ),
         "desktop.mime_associations.set": (
-            'params={"desktop_id": exact installed .desktop ID, "mime_types": '
-            "[exact advertised MIME]}; sets only the model-selected associations and "
-            "verifies each one by read-back"
+            'params={"desktop_id": exact installed .desktop ID, select exactly one: '
+            '"mime_types": [1-20 exact advertised MIME] or "mime_type_prefixes": '
+            "[MIME category]}; categories expand all matching advertised types for "
+            "that application; verifies each selected association by read-back"
         ),
         "filesystem.rename": (
             'params={"source": absolute existing path, "destination": absolute new path, '
