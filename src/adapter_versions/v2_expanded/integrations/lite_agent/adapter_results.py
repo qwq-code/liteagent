@@ -4,6 +4,8 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
+from glob import has_magic
+from pathlib import PurePath
 from typing import Any
 
 from impress_adapter.geometry_contract import order_shapes_by_position
@@ -2297,6 +2299,23 @@ def command_run_context(result: dict[str, Any]) -> dict[str, Any]:
         "output_saved": isinstance(result.get("stdout_path"), str),
         "terminal_launch": isinstance(result.get("terminal"), dict),
     }
+    argument_guidance = ""
+    if isinstance(argv, list) and argv and all(isinstance(item, str) for item in argv):
+        shell_script = PurePath(argv[0]).name in {
+            "sh", "bash", "dash", "zsh", "ksh", "fish",
+        } and any(
+            option.startswith("-") and not option.startswith("--") and "c" in option
+            for option in argv[1:2]
+        )
+        if not shell_script and any(has_magic(argument) for argument in argv[1:]):
+            argument_guidance = (
+                "Direct argv does not expand wildcard arguments; the selected program receives "
+                "them literally unless it interprets patterns itself. If shell expansion was "
+                "intended, explicitly select argv=[\"bash\", \"-c\", <one model-authored script>]. "
+                "Keep native program patterns when intentional. A successful process return "
+                "code does not verify that requested output artifacts exist; inspect the "
+                "requested end state before claiming completion."
+            )
     for key in ("stdout", "stderr"):
         output = result.get(key)
         if isinstance(output, str):
@@ -2308,6 +2327,8 @@ def command_run_context(result: dict[str, Any]) -> dict[str, Any]:
             "The command completed and its stdout was saved at stdout_path. Do not rerun the "
             "same command unless a distinct requested artifact is still missing."
         )
+        if argument_guidance:
+            context["guidance"] = argument_guidance + " " + context["guidance"]
         return context
 
     if context["terminal_launch"]:
@@ -2345,6 +2366,8 @@ def command_run_context(result: dict[str, Any]) -> dict[str, Any]:
                 "gsettings list-relocatable-schemas and a concrete SCHEMA:/instance/path/ "
                 "before trying another key."
             )
+    if argument_guidance:
+        context["guidance"] = argument_guidance + " " + context["guidance"]
     return context
 
 
@@ -2751,7 +2774,7 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
         }
         matrices = {
             key: result.get(key)
-            for key in ("display_text", "formulas", "kinds", "cell_addresses")
+            for key in ("display_text", "formulas", "values", "number_formats", "kinds", "cell_addresses")
             if isinstance(result.get(key), list)
         }
         if "cell_addresses" not in matrices:

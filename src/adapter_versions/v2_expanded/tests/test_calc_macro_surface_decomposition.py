@@ -193,14 +193,15 @@ def test_scaled_display_allows_model_selected_value_transfer(
             event(5, "range.read", {"sheet": "Observed", "range": "J2:J9"}),
         ]
     )
-    assert CompletionMixin._generic_completion_gate(state) == {
-        "passed": True,
-        "missing": [],
-    }
+    # Schema-valid calls are permitted, but this synthetic ledger contains no
+    # native source or target cells. Operation names alone cannot prove success.
+    gate = CompletionMixin._generic_completion_gate(state)
+    assert not gate["passed"]
+    assert any("source_unverified" in item for item in gate["missing"])
 
     state.events[2].executed = False
     missing = CompletionMixin._generic_completion_gate(state)["missing"]
-    assert any("scaled output" in item for item in missing)
+    assert any("source_unverified" in item for item in missing)
 
 
 def test_scaled_display_coverage_still_requires_requested_column_and_unit() -> None:

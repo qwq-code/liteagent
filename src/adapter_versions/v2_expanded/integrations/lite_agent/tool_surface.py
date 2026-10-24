@@ -78,6 +78,7 @@ from .state_model import RuntimeState
 from .visual_file_identity import pending_visual_image
 from .structural_observation_recovery import recover_structural_tool_surface
 from .bounded_recovery import recent_failure, repeated_tool, recover_tools
+from .completion_outcomes import completion_outcome_issues
 from .terminal_tool_constraints import constrain_terminal_provenance_tools
 from .vscode_workspace_context import (
     constrain_workspace_add_tools,
@@ -1086,6 +1087,15 @@ class ToolSurfaceMixin:
 
     def tools(self, state: RuntimeState) -> list[dict[str, Any]]:
         tools = self._tools_for_state(state)
+        issues = completion_outcome_issues(state)
+        if issues:
+            # Preserve model choice while keeping real, unresolved defects repairable.
+            actions = list(dict.fromkeys(action for issue in issues
+                                        for action in issue["repair_actions"]))
+            recovery = self._build_tools(state.domain, actions, include_gui=False,
+                                         include_control_tools=True, strict_generic=True)
+            names = {t["function"]["name"] for t in tools}
+            tools = [*tools, *[t for t in recovery if t["function"]["name"] not in names]]
         # A catalog hit is an executable promise. Keep the compatibility route
         # callable when discovery explicitly exposed it, alongside the atoms.
         if (

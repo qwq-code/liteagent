@@ -1221,6 +1221,11 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
     "command.run": {
             "description": (
                 "Use for one finite command whose exit status or captured output must be verified. "
+                "argv is passed directly without a shell: wildcards remain literal unless the selected "
+                "program interprets patterns itself. For shell wildcard expansion, explicitly select "
+                "argv=[\"bash\", \"-c\", <one complete model-authored script>]. "
+                "A successful return code verifies the process, not requested file creation; inspect "
+                "the actual output artifacts before claiming they were created. "
                 "To save its standard output, set stdout_path alongside argv; omitting it returns text without "
                 "saving a file. For example, argv=[\"uname\", \"-a\"] with stdout_path=\"/tmp/system.txt\" "
                 "saves that command's output. "

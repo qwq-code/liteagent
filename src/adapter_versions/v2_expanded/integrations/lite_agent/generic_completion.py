@@ -12,6 +12,9 @@ import re
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from .calc_scaled_display import scaled_display_contract
+from .completion_outcomes import completion_outcome_issues
+
 from .completion_policy import (
     collect_initial_completion_evidence,
     command_is_read_only,
@@ -56,11 +59,21 @@ def _semantic_mutation_actions(
     is_read_only_action: Callable[[str], bool],
 ) -> set[str]:
     legacy = set(legacy_actions)
+    if _scaled_mutation_actions(state):
+        # Verify native values and displays rather than prescribing a transfer API.
+        legacy |= {"range.copy", "range.set_scaled_display"}
     return {
         action
         for action in instruction_actions(state.domain, state.instruction)
         if action not in legacy and not is_read_only_action(action)
     }
+
+
+def _scaled_mutation_actions(state: Any) -> set[str]:
+    if state.domain == "libreoffice_calc" and scaled_display_contract(state.instruction):
+        return {"range.copy", "range.set_scaled_display", "range.write",
+                "cells.set_formulas", "range.format"}
+    return set()
 
 
 def _observed_mutation_actions(state: Any) -> set[str]:
@@ -131,6 +144,7 @@ def strict_completion_gate(
     semantic_action_equivalents: Callable[[Any], dict[str, set[str]]] | None = None,
 ) -> dict[str, Any]:
     """Apply generic mutation, persistence, and read-back evidence only."""
+    outcome_issues = completion_outcome_issues(state)
     # GUI outcomes are reviewed visually by the planner, not an invented API mutation.
     # Only an explicit claim enters the existing deferred terminal-audit path.
     if completion is not None and _audited_gui_completion_available(
@@ -138,6 +152,7 @@ def strict_completion_gate(
     ):
         missing = completion_claim_contract_errors(completion)
         missing.extend(completion_claim_contradictions(completion))
+        missing.extend(issue["message"] for issue in outcome_issues)
         return {
             "passed": not missing,
             "missing": missing,
@@ -156,7 +171,7 @@ def strict_completion_gate(
             is_read_only_action=is_read_only_action,
             is_save_action=is_save_action,
             relevance_score=relevance_score,
-            required_mutations=semantic_actions,
+            required_mutations=semantic_actions | _scaled_mutation_actions(state),
         )
     )
     if semantic_actions:
@@ -178,7 +193,9 @@ def strict_completion_gate(
             )
     if semantic_requirement_errors is not None:
         missing.extend(semantic_requirement_errors(state))
-    return {"passed": not missing, "missing": list(dict.fromkeys(missing))}
+    missing.extend(issue["message"] for issue in outcome_issues)
+    return {"passed": not missing, "missing": list(dict.fromkeys(missing)),
+            **({"outcome_issues": outcome_issues} if outcome_issues else {})}
 
 
 def strict_completion_phase(

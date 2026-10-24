@@ -31,6 +31,7 @@ from .state_model import RuntimeState
 from .strict_contracts import RANGE_WRITE_FACADES
 from .recovery_surface import last_failure_summary
 from .bounded_recovery import recovery_guidance as observed_recovery_guidance
+from .completion_outcomes import completion_outcome_issues
 
 
 # Ordinary protocol retries stay deliberately small.  A failed call after a
@@ -455,6 +456,9 @@ class AgentProtocolMixin:
                 + "\nChoose the single next action using the instruction, latest tool results, "
                 "and current screenshot."
             )
+        outcome_issues = completion_outcome_issues(state)
+        if outcome_issues:
+            state_text += "\ncompletion_outcomes: " + json.dumps(outcome_issues, ensure_ascii=False)
         copy_guidance = collection_copy_path_guidance(state)
         if copy_guidance:
             state_text += "\nCollection-copy path guidance: " + copy_guidance

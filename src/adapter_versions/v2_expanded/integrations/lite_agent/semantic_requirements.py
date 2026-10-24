@@ -24,6 +24,7 @@ from .clipboard_path_semantics import (
     completion_errors as clipboard_path_completion_errors,
 )
 from .calc_scaled_display import (
+    scaled_display_contract,
     describe_scaled_display_output,
     missing_scaled_display_outputs,
 )
@@ -171,7 +172,7 @@ def _calc_errors(state: Any) -> list[str]:
             f"only {observed_pivots} succeeded"
         )
 
-    missing_scaled_outputs = missing_scaled_display_outputs(
+    missing_scaled_outputs = [] if scaled_display_contract(instruction) else missing_scaled_display_outputs(
         instruction,
         _arguments(state, "range.set_scaled_display"),
     )
