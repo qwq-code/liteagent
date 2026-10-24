@@ -2706,6 +2706,41 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
     result = body.get("result")
     if not isinstance(result, dict):
         return None
+    if domain == "libreoffice_calc" and action == "range.text_transform":
+        readback = result.get("readback")
+        display = readback.get("display_text") if isinstance(readback, dict) else None
+        return {
+            key: result.get(key)
+            for key in (
+                "source_sheet",
+                "source_range",
+                "destination_sheet",
+                "destination_range",
+                "operation",
+                "written_cells",
+            )
+        } | {
+            **(
+                {"display_summary": display_matrix_summary(display)}
+                if display_matrix_summary(display)
+                else {}
+            ),
+            **(
+                {"display_text": display}
+                if isinstance(display, list)
+                and len(json.dumps(display, ensure_ascii=False, default=str)) <= 4000
+                else {}
+            ),
+            "verification_passed": (body.get("verification") or {}).get("passed"),
+            "guidance": (
+                f"Only operation={result.get('operation')} was applied; this call did not "
+                "apply any other whitespace or case transform. If the instruction requires "
+                "another effect, call range.text_transform again with a different operation, "
+                "using destination_range as source_range and its top-left cell as destination. "
+                "After every requested transform and structural read-back, save the current "
+                "workbook by calling workbook.save with no fields (arguments {})."
+            ),
+        }
     if domain == "libreoffice_calc" and action == "pivot.create" and (
         isinstance(result.get("readback"), dict) or "readback_error" in result
     ):

@@ -12,6 +12,8 @@ ASSOCIATION_ROUTES = [
 @pytest.mark.parametrize("query", [
     "set the default video player",
     "change my default music player",
+    "set default video player VLC",
+    "set VLC as the default music player",
 ])
 def test_default_player_search_exposes_existing_application_and_mime_tools(query):
     matches = search_actions("multi_apps", query, strict_generic=True)
@@ -27,3 +29,13 @@ def test_current_player_playback_search_does_not_offer_default_association_mutat
     routes = {(item.get("adapter"), item.get("downstream_action")) for item in matches}
 
     assert routes.isdisjoint(ASSOCIATION_ROUTES)
+
+
+def test_named_player_internal_setting_keeps_application_ownership():
+    matches = search_actions(
+        "multi_apps", "set VLC volume", strict_generic=True
+    )
+    assert matches[0]["adapter"] == "vlc"
+    assert {(m.get("adapter"), m.get("downstream_action")) for m in matches}.isdisjoint(
+        ASSOCIATION_ROUTES
+    )

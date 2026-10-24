@@ -4141,7 +4141,10 @@ def _search_multi_app_actions(
                     ("libreoffice_calc", "workbook.inspect"): 4500,
                     ("libreoffice_calc", "range.read"): 3500,
                 }.get((route_domain, action), 0)
-            if len(named_domains) == 1 and operation_query and route_domain in named_domains:
+            if (len(named_domains) == 1 and operation_query and route_domain in named_domains
+                    and not desktop_association_search):
+                # Naming the desired default application does not make it the
+                # owner of desktop MIME associations. Keep the OS routes above.
                 score += 30_000
             if score:
                 matches.append((score, route_domain, action))

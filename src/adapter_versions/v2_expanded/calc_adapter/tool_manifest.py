@@ -707,8 +707,14 @@ _ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "range.text_transform": {
         "description": (
-            "Apply one text operation to selected cells and write the result "
-            "to an explicit destination. Every selected source cell is transformed; "
+            "Apply exactly one text transform to selected cells and write the result "
+            "to an explicit destination. Call this action again for each additional "
+            "transform in the intended order, using the preceding destination_range "
+            "as source_range and the same top-left destination when transforming in place. "
+            "title_case changes letter case only and does not trim or collapse whitespace; "
+            "a request for both whitespace cleanup and title casing requires separate "
+            "collapse_whitespace and title_case calls. "
+            "Every selected source cell is transformed; "
             "headers are not detected or skipped automatically. When cleaning data "
             "below existing column headers, select only data rows and keep both "
             "headers unchanged unless the user asks to edit them."
