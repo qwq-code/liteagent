@@ -924,6 +924,8 @@ def compact_adapter_body(body: Any, max_chars: int = 6000) -> Any:
                 "header",
                 "decimal_places",
                 "written_cells",
+                "text_properties",
+                "lost_text_properties",
                 "filled_cells",
                 "error_cells",
             )
@@ -2706,6 +2708,17 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
     result = body.get("result")
     if not isinstance(result, dict):
         return None
+    if domain == "libreoffice_calc" and action == "view.set_zoom":
+        return {**result,
+            "verification_passed": (body.get("verification") or {}).get("passed"),
+            "guidance": (
+                "zoom is the actual absolute percentage, not an amount to subtract. "
+                "previous_zoom and direction describe the change already applied. "
+                "For a relative request such as zoom out a little, one moderate change "
+                "in the requested direction can satisfy it. Compare this readback with "
+                "the instruction; if satisfied, save the workbook and propose_done. "
+                "Do not repeatedly lower the zoom toward the minimum."
+            )}
     if domain == "libreoffice_calc" and action == "range.text_transform":
         readback = result.get("readback")
         display = readback.get("display_text") if isinstance(readback, dict) else None
@@ -2718,6 +2731,8 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
                 "destination_range",
                 "operation",
                 "written_cells",
+                "text_properties",
+                "lost_text_properties",
             )
         } | {
             **(
@@ -2737,6 +2752,11 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
                 "apply any other whitespace or case transform. If the instruction requires "
                 "another effect, call range.text_transform again with a different operation, "
                 "using destination_range as source_range and its top-left cell as destination. "
+                "text_properties.satisfied describes the current destination, including "
+                "effects retained from earlier calls. lost_text_properties lists effects "
+                "this write removed. Reusing the original source can undo prior work. "
+                "When the requested properties are true, this readback is sufficient: "
+                "stop transforming, save, and propose_done. "
                 "After every requested transform and structural read-back, save the current "
                 "workbook by calling workbook.save with no fields (arguments {})."
             ),

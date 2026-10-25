@@ -935,6 +935,8 @@ def completion_claim_contradictions(
             r"(?i)\bcannot\s+complete\s+(?:this|the)\s+task\b",
         ),
         "the completion claim describes work that still needs to happen": (
+            r"(?i)\b(?:ready|prepared)\s+for\s+(?:the\s+)?user\s+to\s+"
+            r"(?:perform|finish|complete|crop|edit|save|export)\b",
             r"(?i)\bthe\s+next(?:\s+(?:logical|required|necessary))?\s+step\s+"
             r"(?:is|would\s+be|will\s+be)\s+to\b",
             r"(?i)\b(?:I|we|the\s+user)\s+(?:still\s+)?(?:need|needs|will\s+need|would\s+need)\s+to\b",

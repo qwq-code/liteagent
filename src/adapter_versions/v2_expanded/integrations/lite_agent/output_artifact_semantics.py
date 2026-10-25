@@ -24,7 +24,7 @@ _FILE_TOKEN = (
 )
 _OUTPUT_VERB_TARGET = re.compile(
     rf"(?is)\b(?:save|export|write|create|generate|compress|zip|convert|copy|move|merge|"
-    rf"place|put|store|capture|record|produce)\b"
+    rf"place|put|store|capture|record|produce|crop)\b"
     rf"(?:(?![.!?]\s+[A-Z]).){{0,180}}?\b(?:as|to|into|under)\b"
     rf"(?:(?![.!?]\s+[A-Z]).){{0,80}}?(?P<target>{_FILE_TOKEN})"
 )

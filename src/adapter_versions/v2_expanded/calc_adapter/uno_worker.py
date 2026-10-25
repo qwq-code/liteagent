@@ -1727,6 +1727,21 @@ def _transform_text_value(value: str, operations: list[str]) -> str:
     return transformed
 
 
+def _text_properties(values: list[str]) -> dict[str, Any]:
+    """Describe observed text, without claiming that a task is complete."""
+    nonempty = [value for value in values if value]
+    operations = ("trim", "collapse_whitespace", "title_case", "lowercase", "uppercase")
+    return {
+        "nonempty_cells": len(nonempty),
+        "satisfied": {
+            operation: bool(nonempty) and all(
+                _transform_text_value(value, [operation]) == value for value in nonempty
+            )
+            for operation in operations
+        },
+    }
+
+
 def _text_transform(session: CalcSession, params: dict[str, Any]) -> dict[str, Any]:
     source_sheet = session.sheet(params["source_sheet"])
     destination_sheet = session.sheet(params["destination_sheet"])
@@ -1758,6 +1773,13 @@ def _text_transform(session: CalcSession, params: dict[str, Any]) -> dict[str, A
             value_row.append((kind, str(cell.getString())))
         source_values.append(value_row)
 
+    destination_before = _text_properties([
+        str(destination_sheet.getCellByPosition(
+            destination_address.StartColumn + column,
+            destination_address.StartRow + row,
+        ).getString())
+        for row in range(rows) for column in range(columns)
+    ])
     skip_blank = bool(params.get("skip_blank", False))
     written = 0
     for row, value_row in enumerate(source_values):
@@ -1782,16 +1804,23 @@ def _text_transform(session: CalcSession, params: dict[str, Any]) -> dict[str, A
         f"{_column_label(end_column)}{end_row + 1}"
     )
     session.doc.calculateAll()
+    readback = _range_snapshot(destination_sheet.getCellRangeByName(output_range), session.doc)
+    destination_after = _text_properties([
+        str(value) for row in readback["display_text"] for value in row
+    ])
     return {
+        "text_properties": destination_after,
+        "lost_text_properties": [
+            name for name, satisfied in destination_before["satisfied"].items()
+            if satisfied and not destination_after["satisfied"][name]
+        ],
         "source_sheet": params["source_sheet"],
         "source_range": params["source_range"],
         "destination_sheet": params["destination_sheet"],
         "destination_range": output_range,
         "operation": params["operation"],
         "written_cells": written,
-        "readback": _range_snapshot(
-            destination_sheet.getCellRangeByName(output_range), session.doc
-        ),
+        "readback": readback,
     }
 
 
@@ -3730,8 +3759,14 @@ def _pivot_create_stacked_aggregate(
 
 def _set_zoom(session: CalcSession, params: dict[str, Any]) -> dict[str, Any]:
     controller = session.activate_sheet(params["sheet"])
+    previous_zoom = int(controller.ZoomValue)
     controller.ZoomValue = params["zoom"]
-    return {"sheet": params["sheet"], "zoom": int(controller.ZoomValue)}
+    actual_zoom = int(controller.ZoomValue)
+    return {"sheet": params["sheet"], "previous_zoom": previous_zoom,
+            "zoom": actual_zoom, "requested_zoom": params["zoom"],
+            "direction": "out" if actual_zoom < previous_zoom else (
+                "in" if actual_zoom > previous_zoom else "unchanged")}
+
 
 
 def _freeze(session: CalcSession, params: dict[str, Any]) -> dict[str, Any]:

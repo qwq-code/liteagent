@@ -937,6 +937,7 @@ _ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["sheet", "range"],
     },
     "view.set_zoom": {
+        "description": "Set one absolute zoom percentage and return previous and actual zoom. Compare with the request, then save and finish once satisfied; repeated reduction is unnecessary.",
         "properties": {
             "sheet": {
                 **NONEMPTY_STRING,
