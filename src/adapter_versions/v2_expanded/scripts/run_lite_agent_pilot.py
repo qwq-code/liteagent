@@ -374,9 +374,12 @@ def prepare_guest_setup_dependencies(
     controller: Any, example: dict[str, Any]
 ) -> dict[str, Any]:
     setup_text = json.dumps(example.get("config", []), ensure_ascii=True).lower()
-    if not re.search(r"\bjq\b", setup_text):
+    required = ["jq"] if re.search(r"\bjq\b", setup_text) else []
+    if re.search(r"\bsar\b", str(example.get("instruction", "")), re.IGNORECASE):
+        required.append("sar")
+    if not required:
         return {"required": [], "prepared": []}
-    code = r"""
+    code = "required = " + repr(required) + "\n" + r"""
 import json
 import shutil
 import subprocess
@@ -395,22 +398,23 @@ def sudo(command):
 sudo(["systemctl", "stop", "packagekit.service", "packagekit.socket"])
 sudo(["systemctl", "mask", "--runtime", "packagekit.service", "packagekit.socket"])
 attempts = []
-if shutil.which("jq") is None:
+missing = [name for name in required if shutil.which(name) is None]
+if missing:
     update = sudo(["apt-get", "-o", "DPkg::Lock::Timeout=90", "update"])
     install = sudo(
-        ["apt-get", "-o", "DPkg::Lock::Timeout=90", "install", "-y", "jq"]
+        ["apt-get", "-o", "DPkg::Lock::Timeout=90", "install", "-y", *["sysstat" if name == "sar" else name for name in missing]]
     )
     attempts.extend(
         [
             {"operation": "apt-get update", "returncode": update.returncode},
-            {"operation": "apt-get install jq", "returncode": install.returncode},
+            {"operation": "apt-get install " + " ".join(missing), "returncode": install.returncode},
         ]
     )
 print(
     json.dumps(
         {
-            "required": ["jq"],
-            "prepared": ["jq"] if shutil.which("jq") else [],
+            "required": required,
+            "prepared": [name for name in required if shutil.which(name)],
             "attempts": attempts,
         }
     )
@@ -424,8 +428,8 @@ print(
         raise RuntimeError(
             f"failed to parse guest dependency result: {response}"
         ) from exc
-    if result.get("prepared") != ["jq"]:
-        raise RuntimeError(f"failed to prepare guest dependency jq: {result}")
+    if result.get("prepared") != required:
+        raise RuntimeError(f"failed to prepare guest dependencies {required}: {result}")
     return result
 
 

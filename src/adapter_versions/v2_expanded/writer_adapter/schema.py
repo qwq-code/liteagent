@@ -78,6 +78,7 @@ ACTIONS = frozenset(
         "document.add_page_numbers",
         "document.insert_page_break",
         "document.append_paragraphs",
+        "document.append_text_file",
         "paragraph.set_format",
         "paragraph.clear_text",
         "paragraph.apply_numbering",
@@ -1099,6 +1100,14 @@ def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
         parse_rgb_color(params.get("color"), "params.color")
     elif action == "image.insert_at_cursor":
         _string(params, "path")
+    elif action == "document.append_text_file":
+        _string(params, "path")
+        if set(params) - {"path", "separator", "encoding"}:
+            raise AdapterError("INVALID_REQUEST", "append_text_file accepts path, separator and encoding only")
+        if not isinstance(params.get("separator", ""), str):
+            raise AdapterError("INVALID_REQUEST", "separator must be a string")
+        if params.get("encoding", "utf-8") not in {"utf-8", "utf-8-sig"}:
+            raise AdapterError("INVALID_REQUEST", "encoding must be utf-8 or utf-8-sig")
     elif action == "document.append_paragraphs":
         paragraphs = params.get("paragraphs")
         if (

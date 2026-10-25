@@ -31,6 +31,11 @@ def batch_coverage_issues(state: Any) -> list[dict]:
         paths = set()
         read_spans = {}
         source_sizes = {}
+        source_chunks = {}
+        transferred = set()
+        written_parts = []
+        saw_writer_append = False
+        output_trace_known = True
         for _event, _domain, action, _args, hint in events:
             if action in {'workspace.find_files', 'filesystem.find'}:
                 paths.update(m['path'] for m in hint.get('matches', [])
@@ -54,13 +59,33 @@ def batch_coverage_issues(state: Any) -> list[dict]:
                             and isinstance(start, int) and isinstance(end, int)
                             and isinstance(content, str) and end - start == len(content)):
                             read_spans.setdefault(path, []).append((start, end))
+                            source_chunks.setdefault(path, {})[start] = content
+            if _domain == 'libreoffice_writer':
+                if action == 'document.create':
+                    transferred.clear()
+                    written_parts.clear()
+                    output_trace_known = True
+                elif action == 'document.append_text_file' and hint.get('content_verified') is True:
+                    transferred.add(hint.get('source_path'))
+                    saw_writer_append = True
+                elif action == 'document.append_paragraphs':
+                    paragraphs = hint.get('paragraphs')
+                    if isinstance(paragraphs, list) and all(isinstance(p, str) for p in paragraphs):
+                        written_parts.extend(paragraphs)
+                        saw_writer_append = True
+                elif action in {'paragraph.replace_text', 'paragraph.clear_text', 'text.find_replace'}:
+                    output_trace_known = False  # Do not judge a different editing method from stale append receipts.
             # A model-selected shell command can consume files without returning
             # their text. This read-coverage check does not judge that alternate path.
             if action == 'command.run':
                 paths.clear()
                 read_spans.clear()
                 source_sizes.clear()
-        read_paths = set()
+                source_chunks.clear()
+                transferred.clear()
+                written_parts.clear()
+                saw_writer_append = False
+        read_paths = set(transferred)
         for path, spans in read_spans.items():
             end = 0
             for start, stop in sorted(spans):
@@ -69,6 +94,30 @@ def batch_coverage_issues(state: Any) -> list[dict]:
                 end = max(end, stop)
             if path in source_sizes and end >= source_sizes[path]:
                 read_paths.add(path)
+        if saw_writer_append and output_trace_known:
+            written_text = '\n'.join(written_parts).replace('\r\n', '\n').replace('\r', '\n')
+            unwritten = []
+            for path in sorted(paths.intersection(read_paths) - transferred):
+                chunks = source_chunks.get(path, {})
+                cursor = 0
+                parts = []
+                for start, content in sorted(chunks.items()):
+                    if start > cursor:
+                        break
+                    if start + len(content) > cursor:
+                        parts.append(content[max(0, cursor-start):])
+                        cursor = start + len(content)
+                source = ''.join(parts).replace('\r\n', '\n').replace('\r', '\n')
+                if source and source not in written_text:
+                    unwritten.append(path)
+                elif source:
+                    # Identical input files each require their own copy in the output.
+                    written_text = written_text.replace(source, '', 1)
+            if unwritten:
+                issues.append(_issue('unwritten_batch_sources', unwritten,
+                    f'{len(unwritten)} fully read text sources are absent from the recorded Writer append operations: {unwritten[:12]!r}. '
+                    'Reading files is not writing their contents. Append each remaining file verbatim with document.append_text_file, '
+                    'or write its exact observed text; preserve the requested order and separators.'))
         missing = sorted(paths - read_paths)
         if missing:
             issues.append(_issue('unread_batch_sources', missing,

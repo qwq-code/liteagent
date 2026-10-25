@@ -443,7 +443,10 @@ def _impress_errors(state: Any) -> list[str]:
         errors.append(
             "slide.format_text_roles has not covered the requested shared color for "
             "title, body, and table together with body-only underline; submit the "
-            "missing model-selected role-format rule before completion"
+            "missing model-selected role-format rule before completion. "
+            f"Requested color name={role_request['color_name']!r}, normalized RGB={role_request['color']}; "
+            f"executed role colors={ {slide: {role: _normalized_impress_color(properties.get('color')) for role, properties in roles.items()} for slide, roles in formatted.items()}!r}. "
+            "Pass the requested named color directly; do not guess its packed integer."
         )
 
     content_request = requested_slide_content_formatting(instruction)

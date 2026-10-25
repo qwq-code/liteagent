@@ -3805,6 +3805,8 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
             )
             if key in result
         }
+    if domain == "libreoffice_writer" and action == "document.append_text_file":
+        return {**result, "guidance": "One source file was appended verbatim. This does not include other files. Continue with each remaining model-selected source in the requested order, then read back and save the document."}
     if domain == "libreoffice_writer" and action == "paragraph.clear_text":
         verification = body.get("verification") or {}
         return {

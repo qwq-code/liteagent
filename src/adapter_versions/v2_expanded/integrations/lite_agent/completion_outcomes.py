@@ -119,4 +119,5 @@ def completion_outcome_issues(state: Any) -> list[dict[str, Any]]:
     if state.domain != "libreoffice_calc":
         return issues
     from .calc_scaled_outcomes import scaled_display_issues
-    return issues + scaled_display_issues(state)
+    from .calc_observation_checks import observed_calc_issues
+    return issues + scaled_display_issues(state) + observed_calc_issues(state)

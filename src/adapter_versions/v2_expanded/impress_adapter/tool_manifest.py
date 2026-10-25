@@ -74,7 +74,7 @@ RGB_COLOR = {
         {
             "type": "string",
             "description": (
-                "Use a CSS color name or #RRGGBB. Prefer names for named colors; "
+                "Pass the exact named color from the instruction, including its shade number; do not guess a decimal RGB value. Use a CSS color name or #RRGGBB. Prefer names for named colors; "
                 "for example yellow=#FFFF00, red=#FF0000, and LibreOffice palette green=#00A933. "
                 "Use #008000 only when CSS green is specifically requested. Integer "
                 "values use packed 24-bit RGB; 65535 is cyan (#00FFFF), while "

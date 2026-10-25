@@ -2188,6 +2188,37 @@ def _insert_page_break(
     return {"inserted": True, "position": "view_cursor"}
 
 
+def _append_text_file(session: WriterSession, params: dict[str, Any]) -> dict[str, Any]:
+    path = _url_path(params["path"]) if params["path"].startswith("file:") else Path(params["path"]).expanduser()
+    if path is None or not path.is_file():
+        raise AdapterError("FILE_NOT_FOUND", "plain-text source file does not exist")
+    if path.stat().st_size > 4_000_000:
+        raise AdapterError("INVALID_REQUEST", "text source exceeds the 4 MB limit")
+    raw = path.read_bytes()
+    try:
+        content = raw.decode(params.get("encoding", "utf-8"))
+    except UnicodeDecodeError as exc:
+        raise AdapterError("INVALID_REQUEST", "source is not valid text in the selected encoding") from exc
+    if "\x00" in content:
+        raise AdapterError("INVALID_REQUEST", "binary content cannot be appended as plain text")
+    # UNO treats CR and LF separately; normalize before insertion so CRLF
+    # creates one paragraph boundary rather than an extra blank paragraph.
+    def normalize(value):
+        return value.replace("\r\n", "\n").replace("\r", "\n")
+    text = session.doc.Text
+    before = str(text.String)
+    separator = params.get("separator", "") if before else ""
+    inserted = normalize(separator + content)
+    cursor = text.createTextCursorByRange(text.getEnd())
+    text.insertString(cursor, inserted, False)
+    actual = str(text.String)
+    verified = normalize(actual) == normalize(before) + inserted
+    return {"source_path": str(path.resolve()), "source_sha256": hashlib.sha256(raw).hexdigest(),
+            "source_chars": len(content), "inserted_chars": len(inserted),
+            "separator": separator, "content_verified": verified,
+            "document_chars": len(actual)}
+
+
 def _append_paragraphs(
     session: WriterSession, params: dict[str, Any]
 ) -> dict[str, Any]:
@@ -2979,6 +3010,7 @@ GENERIC_ACTIONS = {
     "document.add_page_numbers": _add_page_numbers,
     "document.insert_page_break": _insert_page_break,
     "document.append_paragraphs": _append_paragraphs,
+    "document.append_text_file": _append_text_file,
     "paragraph.set_format": _set_paragraph_format,
     "paragraph.clear_text": _clear_paragraph_text,
     "paragraph.apply_numbering": apply_paragraph_numbering,
@@ -3080,6 +3112,9 @@ def _implicit_action_verification(
                     "exists": True, "valid": True}
         passed = all(result.get(key) == value for key, value in expected.items())
         return _verification(passed, [{"type": "new_blank_document", "passed": passed}], result, expected)
+    if action == "document.append_text_file":
+        passed = result.get("content_verified") is True
+        return _verification(passed, [{"type": "verbatim_text_append", "passed": passed}], result, {"content_verified": True})
     if action == "settings.set_default_font":
         return _verify_requested(
             session, [{"type": "default_font", "expected": result["font_name"]}]

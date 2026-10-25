@@ -110,6 +110,7 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
         ],
     },
     "image.crop": {
+        "description": "Crop ONE observed source image. If the instruction supplies only an output filename, pass that filename unchanged as output_path; the adapter saves beside input_path. Do not prepend a guessed home or working directory. Explicit user-requested output directories take precedence.",
         "properties": {
             "input_path": {
                 "type": "string",

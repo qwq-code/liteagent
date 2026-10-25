@@ -142,6 +142,9 @@ class AgentProtocolMixin:
             "adapter=\"os\", action=\"filesystem.find\", payload.params with "
             "roots and name_patterns as native JSON arrays, for example "
             "{\"roots\":[\"~/Desktop\"],\"name_patterns\":[\"*\"]}. "
+            "The params key does not accept path. Discover an unknown source basename before opening it; one failed guessed path does not prove the file is absent. "
+            "For an output given only as a filename, follow the selected API's relative-path contract; do not invent a /home/user destination. For source-file conversions without a specified output directory, keep the result beside the observed source unless the instruction says otherwise. "
+            "For exact text-file concatenation into Writer, discover document.append_text_file and append one observed file per call, with no separator unless requested; do not retype or summarize file contents. "
             "The params key does not accept path. If a supplied folder is unnamed, "
             "start with ~/Desktop; never emit /path/to placeholders. For "
             "os.image.extract_text_batch, payload.params is one object with "
@@ -444,9 +447,12 @@ class AgentProtocolMixin:
                 if contains_text_batch_context(summary)
                 else MODEL_PROTOCOL_RECOVERY_MAX_CHARS
             )
-            if state.domain == "multi_apps" and len(
-                json.dumps(summary, ensure_ascii=False)
-            ) > normal_budget:
+            # Office inspection loops can otherwise grow the prompt without bound.
+            # Keep larger single-domain observations (tables/slides) than the compact
+            # cross-app handoff, while preserving the authoritative event ledger.
+            if state.domain != "multi_apps":
+                normal_budget = max(normal_budget, 24_000)
+            if len(json.dumps(summary, ensure_ascii=False)) > normal_budget:
                 summary = compact_execution_summary_for_model(
                     summary, max_chars=normal_budget
                 )

@@ -768,6 +768,9 @@ DOMAIN_SIGNATURES = {
             'params={"find": exact nonempty str, "replacement": str, "replace_all": bool, '
             '"case_sensitive": bool}; replaces only the literal selected by the model'
         ),
+        "document.append_text_file": (
+            'params={"path": exact observed text file path, "separator"?: literal str, "encoding"?: "utf-8"|"utf-8-sig"}; append ONE file verbatim to the active Writer document without retyping or changing existing content'
+        ),
         "document.append_paragraphs": (
             'params={"paragraphs": [exact str], "blank_paragraphs_before"?: int[0,10], '
             '"blank_paragraphs_between"?: int[0,10]}; appends explicit paragraphs in order'

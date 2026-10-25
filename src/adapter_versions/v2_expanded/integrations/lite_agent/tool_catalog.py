@@ -1236,6 +1236,9 @@ ACTION_KEYWORDS = {
         "tabstops",
         "text",
     },
+    ("libreoffice_writer", "document.append_text_file"): {
+        "append", "insert", "import", "text", "txt", "file", "files", "verbatim", "combine", "concatenate", "merge", "writer", "document",
+    },
     ("libreoffice_writer", "document.append_paragraphs"): {
         "add",
         "append",

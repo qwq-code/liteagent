@@ -1083,6 +1083,15 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "required": ["path"],
     },
+    "document.append_text_file": {
+        "description": "Append the exact content of ONE observed local plain-text file at the end of the active Writer document. Preserves text and logical line breaks (CRLF/CR normalize to LF). No summarizing, sorting, globbing, or automatic separators. For several files, call once per file in model-selected order; use separator='' for exact concatenation. The caller selects the document and saves/exports separately.",
+        "properties": {
+            "path": {"type": "string", "minLength": 1, "description": "Exact observed local path of one plain-text file."},
+            "separator": {"type": "string", "default": "", "description": "Literal text inserted before this file when the document is nonempty. Default adds nothing."},
+            "encoding": {"type": "string", "enum": ["utf-8", "utf-8-sig"], "default": "utf-8"},
+        },
+        "required": ["path"],
+    },
     "document.append_paragraphs": {
         "description": (
             "Append explicit model-authored paragraphs to the active Writer document. "
