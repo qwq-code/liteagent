@@ -118,3 +118,68 @@ def test_agent_surface_and_messages_share_structural_recovery():
     assert 'adapter__presentation_inspect' not in names
     state.events.pop()
     assert 'adapter__presentation_inspect' in {t['function']['name'] for t in agent.tools(state)}
+
+
+def test_saved_edit_and_duplicate_observations_offer_review_not_another_undo():
+    state = make_state()
+    edit = ExecutionEvent(step=1, timestamp_utc='', executed=True,
+        proposed={'kind': 'adapter', 'action': 'presentation.set_page_size',
+                  'arguments': {'width': 19000, 'height': 27000}},
+        result={'context_hint': {'verification_passed': True}})
+    save = ExecutionEvent(step=2, timestamp_utc='', executed=True,
+        proposed={'kind': 'adapter', 'action': 'presentation.save', 'arguments': {}},
+        result={'context_hint': {'saved': True}})
+    for i, e in enumerate(state.events, 3):
+        e.step = i
+    state.events = [edit, save, *state.events]
+    tools = build_tools(state.domain, ['presentation.inspect', 'presentation.set_page_size', 'presentation.save'],
+                        include_gui=True, strict_generic=True)
+    before = deepcopy(state.events)
+    reviewed = recover_structural_tool_surface(tools, state)
+    assert {t['function']['name'] for t in reviewed} == {'tools_search', 'propose_done', 'fail_task'}
+    assert state.events == before
+    # An unfinished requirement can be pursued through search; no automatic
+    # completion or mutation is inserted, and ordinary tools return immediately.
+    state.events.append(ExecutionEvent(step=5, timestamp_utc='', executed=True,
+        proposed={'kind': 'catalog', 'tool': 'tools_search', 'arguments': {'query': 'resize slides'}},
+        result={'matches': []}))
+    assert recover_structural_tool_surface(tools, state) == tools
+
+
+def test_unsaved_edit_retains_edit_and_save_choices():
+    state = make_state()
+    state.events.insert(0, ExecutionEvent(step=0, timestamp_utc='', executed=True,
+        proposed={'kind': 'adapter', 'action': 'table.create', 'arguments': {}}, result={}))
+    tools = build_tools(state.domain, ['presentation.inspect', 'table.create', 'presentation.save'],
+                        include_gui=False, strict_generic=True)
+    names = {t['function']['name'] for t in recover_structural_tool_surface(tools, state)}
+    assert {'adapter__table_create', 'adapter__presentation_save', 'tools_search'} <= names
+
+
+def test_repeated_observation_after_save_without_edit_keeps_mutation_available():
+    state = make_state()
+    state.events.insert(0, ExecutionEvent(step=0, timestamp_utc='', executed=True,
+        proposed={'kind': 'adapter', 'action': 'presentation.save', 'arguments': {}}, result={}))
+    tools = build_tools(state.domain, ['presentation.inspect', 'table.create', 'presentation.save'],
+                        include_gui=False, strict_generic=True)
+    names = {t['function']['name'] for t in recover_structural_tool_surface(tools, state)}
+    assert 'adapter__table_create' in names
+    assert 'adapter__presentation_save' not in names
+
+
+@pytest.mark.parametrize('kind', ['gui', 'dispatched_failure'])
+def test_intervening_possible_mutation_invalidates_saved_review(kind):
+    state = make_state()
+    edit = ExecutionEvent(step=0, timestamp_utc='', executed=True,
+        proposed={'kind': 'adapter', 'action': 'table.create', 'arguments': {}}, result={})
+    save = ExecutionEvent(step=1, timestamp_utc='', executed=True,
+        proposed={'kind': 'adapter', 'action': 'presentation.save', 'arguments': {}}, result={})
+    change = ExecutionEvent(step=2, timestamp_utc='', executed=kind == 'gui', validated=True,
+        proposed={'kind': 'gui' if kind == 'gui' else 'adapter',
+                  'action': 'table.create', 'arguments': {}},
+        error=None if kind == 'gui' else {'type': 'partial_execution_failure'})
+    state.events = [edit, save, change, *state.events]
+    tools = build_tools(state.domain, ['presentation.inspect', 'table.create', 'presentation.save'],
+                        include_gui=False, strict_generic=True)
+    names = {t['function']['name'] for t in recover_structural_tool_surface(tools, state)}
+    assert {'adapter__table_create', 'adapter__presentation_save'} <= names

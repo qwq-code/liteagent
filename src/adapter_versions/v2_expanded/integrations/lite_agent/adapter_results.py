@@ -2716,7 +2716,8 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
                 "previous_zoom and direction describe the change already applied. "
                 "For a relative request such as zoom out a little, one moderate change "
                 "in the requested direction can satisfy it. Compare this readback with "
-                "the instruction; if satisfied, save the workbook and propose_done. "
+                "the instruction; if satisfied, save, perform one read-only inspection, "
+                "then propose_done when all user requirements are satisfied. "
                 "Do not repeatedly lower the zoom toward the minimum."
             )}
     if domain == "libreoffice_calc" and action == "range.text_transform":
@@ -2755,8 +2756,9 @@ def adapter_context_hint(domain: str, action: str, body: Any) -> dict[str, Any] 
                 "text_properties.satisfied describes the current destination, including "
                 "effects retained from earlier calls. lost_text_properties lists effects "
                 "this write removed. Reusing the original source can undo prior work. "
-                "When the requested properties are true, this readback is sufficient: "
-                "stop transforming, save, and propose_done. "
+                "When the requested text properties are true, stop transforming. "
+                "Save and use one read-only inspection of the result, then propose_done "
+                "only when all other user requirements are also satisfied. "
                 "After every requested transform and structural read-back, save the current "
                 "workbook by calling workbook.save with no fields (arguments {})."
             ),

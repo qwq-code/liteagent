@@ -474,7 +474,9 @@ class AgentProtocolMixin:
             state_text += (
                 '\nTwo consecutive structural inspections returned the same state. '
                 'The screenshot is omitted on this recovery turn; use the observed document '
-                'objects to choose the remaining edit, or tools_search for a missing operation. '
+                'objects to compare the result with every user requirement. If the result is '
+                'correct and saved, propose_done with the actual evidence. Otherwise choose '
+                'the remaining edit, or tools_search when an operation is not exposed. '
                 'Another identical inspection does not change the document.'
             )
         request_content: list[dict[str, Any]] = [
