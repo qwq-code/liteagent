@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import sys
 import time
 import traceback
@@ -380,36 +381,45 @@ def prepare_guest_setup_dependencies(
     if not required:
         return {"required": [], "prepared": []}
     code = "required = " + repr(required) + "\n" + r"""
+import fcntl
 import json
 import shutil
 import subprocess
 
 
-def sudo(command):
-    return subprocess.run(
-        ["sudo", "-S", *command],
+def sudo(command, timeout=180):
+    # Run the timeout supervisor with the same privileges as apt, so it can
+    # terminate the complete package-manager process group when the limit hits.
+    process = subprocess.run(
+        ["sudo", "-S", "timeout", "--signal=TERM", "--kill-after=5s", str(timeout), *command],
         input="password\n",
-        text=True,
         capture_output=True,
-        timeout=180,
+        text=True,
     )
+    return {
+        "operation": " ".join(command),
+        "returncode": process.returncode,
+        "timed_out": process.returncode in (124, 137),
+        "detail": (process.stderr or process.stdout)[-2000:],
+    }
 
 
-sudo(["systemctl", "stop", "packagekit.service", "packagekit.socket"])
-sudo(["systemctl", "mask", "--runtime", "packagekit.service", "packagekit.socket"])
 attempts = []
 missing = [name for name in required if shutil.which(name) is None]
 if missing:
-    update = sudo(["apt-get", "-o", "DPkg::Lock::Timeout=90", "update"])
-    install = sudo(
-        ["apt-get", "-o", "DPkg::Lock::Timeout=90", "install", "-y", *["sysstat" if name == "sar" else name for name in missing]]
-    )
-    attempts.extend(
-        [
-            {"operation": "apt-get update", "returncode": update.returncode},
-            {"operation": "apt-get install " + " ".join(missing), "returncode": install.returncode},
-        ]
-    )
+    # A lost HTTP response must not start overlapping package managers.
+    lock = open("/tmp/liteagent-guest-dependencies.lock", "a")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        attempts.append({"operation": "dependency setup", "error": "already running"})
+    else:
+        attempts.append(sudo(["systemctl", "stop", "packagekit.service", "packagekit.socket"], timeout=30))
+        attempts.append(sudo(["systemctl", "mask", "--runtime", "packagekit.service", "packagekit.socket"], timeout=30))
+        attempts.append(sudo(["apt-get", "-o", "DPkg::Lock::Timeout=90", "update"]))
+        attempts.append(sudo(
+            ["apt-get", "-o", "DPkg::Lock::Timeout=90", "install", "-y", *["sysstat" if name == "sar" else name for name in missing]]
+        ))
 print(
     json.dumps(
         {
@@ -420,7 +430,12 @@ print(
     )
 )
 """.strip()
-    response = controller.execute_python_command(code)
+    # /execute has a fixed 120-second server limit, shorter than even one apt
+    # operation. This endpoint accepts an explicit budget; all child operations
+    # are bounded to 440 seconds including kill grace, below its 480-second cap.
+    response = controller.run_bash_script("python3 -c " + shlex.quote(code), timeout=480)
+    if not isinstance(response, dict) or response.get("returncode") != 0:
+        raise RuntimeError(f"guest dependency command failed for {required}: {response}")
     output = str(response.get("output", "")).strip().splitlines()
     try:
         result = json.loads(output[-1]) if output else {}
@@ -428,7 +443,7 @@ print(
         raise RuntimeError(
             f"failed to parse guest dependency result: {response}"
         ) from exc
-    if result.get("prepared") != required:
+    if not isinstance(result, dict) or result.get("prepared") != required:
         raise RuntimeError(f"failed to prepare guest dependencies {required}: {result}")
     return result
 

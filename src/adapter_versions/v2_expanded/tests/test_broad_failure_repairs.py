@@ -125,9 +125,9 @@ def test_sar_dependency_is_selected_only_from_explicit_visible_instruction():
     from scripts.run_lite_agent_pilot import prepare_guest_setup_dependencies
     captured = []
     class Controller:
-        def execute_python_command(self, code):
+        def run_bash_script(self, code, timeout):
             captured.append(code)
-            return {'output': '{"required":["sar"],"prepared":["sar"]}'}
+            return {'returncode': 0, 'output': '{"required":["sar"],"prepared":["sar"]}'}
     assert prepare_guest_setup_dependencies(Controller(), {'instruction': 'Use sar to sample resource usage.'})['prepared'] == ['sar']
     assert 'sysstat' in captured[-1]
     captured.clear()

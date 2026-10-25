@@ -501,7 +501,9 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
     "paragraph.apply_numbering": {
         "description": (
             "Apply native Writer numbering copied from one explicit numbered paragraph to "
-            "one explicit target paragraph. This does not insert, remove, or rewrite text."
+            "one explicit target paragraph. Use document.inspect paragraph_details[].numbering "
+            "to choose an existing numbered source_index different from target_index. "
+            "This does not insert, remove, or rewrite text."
         ),
         "properties": {
             "source_index": {
@@ -781,7 +783,8 @@ STRICT_ACTION_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
             "end_offset and matched_text together (matched_text becomes expected_text). "
             "Choose each range and its new formatting yourself. "
             "Literal markers and placeholders can also supply ranges for bookmark.create "
-            "or cross_reference.insert."
+            "or cross_reference.insert. Paragraph numbering is not a character-format "
+            "filter; inspect document.inspect paragraph_details[].numbering instead."
         ),
         "properties": {
             "literal": {

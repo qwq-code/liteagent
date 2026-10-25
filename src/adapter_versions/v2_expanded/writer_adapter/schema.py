@@ -789,6 +789,15 @@ def validate_action_params(action: str, params: Mapping[str, Any]) -> None:
             raise AdapterError(
                 "INVALID_REQUEST",
                 "params.source_index and params.target_index must be different",
+                {
+                    "guidance": (
+                        "source_index is an existing numbered paragraph to copy from, "
+                        "not the paragraph being numbered. Use document.inspect "
+                        "paragraph_details[].numbering and index to choose a source; "
+                        "target_index is the paragraph that needs numbering. "
+                        "text.find format filters character formatting, not numbering."
+                    )
+                },
             )
         level = _nonnegative_int(params, "level")
         if level > 9:

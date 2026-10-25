@@ -96,6 +96,7 @@ class FakeAtspi:
     STATE_SELECTED = "selected"
     STATE_SHOWING = "showing"
     STATE_VISIBLE = "visible"
+    STATE_MODAL = "modal"
 
     def __init__(self, desktop: FakeNode) -> None:
         self.Registry = FakeRegistry(desktop)
@@ -233,6 +234,76 @@ def test_view_state_fails_closed_when_two_code_frames_are_active(
 
     with pytest.raises(AdapterError, match="unique active accessible frame"):
         inspect_view_state(FakeRunner(), "0x01a00002", "extensions")
+
+
+@pytest.mark.parametrize("dialog_role,extra_states", [("dialog", set()), ("frame", {"modal"})])
+def test_inactive_editor_reports_native_modal_text_without_replacing_window(
+    monkeypatch: pytest.MonkeyPatch,
+    dialog_role: str,
+    extra_states: set[str],
+) -> None:
+    atspi = node_tree([], [])
+    application = atspi.Registry.desktop.children[0]
+    application.children[1].states.clear()
+    showing = {"showing", "visible"}
+    application.children.append(FakeNode(
+        "Visual Studio Code", dialog_role, states=showing | extra_states,
+        children=[
+            FakeNode("A debugger extension is required", "label", states=showing),
+            FakeNode("Cancel", "push button", states=showing),
+            FakeNode("Find extension", "push button", states=showing),
+        ],
+    ))
+    install_atspi(monkeypatch, atspi)
+    monkeypatch.setattr(accessibility_state.time, "sleep", lambda _: pytest.fail("dialog must return immediately"))
+
+    with pytest.raises(AdapterError) as caught:
+        accessibility_state.wait_for_active_window(FakeRunner(), "0x01a00002", 10)
+
+    assert caught.value.code == "VSCODE_NOT_READY"
+    details = caught.value.details
+    assert details["window_id"] == "0x1a00002"
+    assert details["recovery"] == "resolve_visible_dialog"
+    assert "A debugger extension is required" in details["visible_dialogs"][0]["labels"]
+    assert details["visible_dialogs"][0]["buttons"] == ["Cancel", "Find extension"]
+
+
+def test_nested_dialog_blocks_editor_command_even_if_frame_is_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dialog = FakeNode("Select debugger", "dialog", states={"visible", "showing"})
+    install_atspi(monkeypatch, node_tree([], [dialog]))
+    with pytest.raises(AdapterError) as caught:
+        inspect_view_state(FakeRunner(), "0x01a00002", "run_and_debug")
+    assert caught.value.details["visible_dialogs"][0]["name"] == "Select debugger"
+
+
+def test_hidden_or_other_application_dialog_does_not_block_selected_frame(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    atspi = node_tree([], [
+        FakeNode("Old dialog", "dialog"),
+        FakeNode("Extension installed", "alert", states={"visible", "showing"}),
+    ])
+    atspi.Registry.desktop.children.append(FakeNode(
+        "Browser", "application", children=[FakeNode(
+            "Confirmation", "dialog", states={"visible", "showing", "modal"},
+        )],
+    ))
+    install_atspi(monkeypatch, atspi)
+    window = accessibility_state.wait_for_active_window(FakeRunner(), "0x01a00002", 0.1)
+    assert window.title == "Beta - Visual Studio Code"
+
+
+def test_no_active_frame_without_observed_dialog_still_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    atspi = node_tree([], [])
+    atspi.Registry.desktop.children[0].children[1].states.clear()
+    install_atspi(monkeypatch, atspi)
+    with pytest.raises(AdapterError) as caught:
+        inspect_view_state(FakeRunner(), "0x01a00002", "run_and_debug")
+    assert caught.value.code == "WINDOW_NOT_FOUND"
 
 
 @pytest.mark.parametrize("label", ["Outline", "Breakpoints"])

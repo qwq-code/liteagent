@@ -3144,6 +3144,15 @@ def select_actions(
         if action in available
     ]
     instruction_tokens = _expanded_instruction_tokens(instruction)
+    text_file_creation_intent = bool(
+        domain == "vs_code"
+        and instruction_tokens.intersection({"create", "creating"})
+        and _tokens(instruction).intersection({"file", "files", "script", "scripts"})
+        and not re.search(
+            r"\b(?:not|never|without)\s+(?:\w+\s+){0,2}creat(?:e|ing)\b",
+            instruction, re.IGNORECASE,
+        )
+    )
     image_subject_intent = bool(
         instruction_tokens.intersection(VISUAL_IMAGE_TOKENS)
     )
@@ -3275,6 +3284,11 @@ def select_actions(
             score += 80.0
         if action in fixed:
             score += 40.0
+        if action == "file.create" and text_file_creation_intent:
+            # An unsaved editor has no workspace or existing file to replace.
+            # Expose the creation primitive; the model still selects its path,
+            # content, overwrite policy, and whether to open the file.
+            score += 900.0
         if action == "workspace.find_files" and active_workspace_file_intent:
             score += 1300.0
         if action == "document.extract_images" and document_image_extraction_intent:

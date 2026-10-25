@@ -7,6 +7,8 @@ import posixpath
 import re
 from typing import Any, Iterable
 
+from .completion_policy import action_is_save
+from .request_blocks import event_changes_application_state
 from .vlc_semantics import required_actions as vlc_required_actions
 
 
@@ -168,10 +170,33 @@ def _find_parameter_schemas(node: Any) -> list[dict[str, Any]]:
 def constrain_zero_match_find_tools(
     tools: list[dict[str, Any]], state: Any
 ) -> list[dict[str, Any]]:
-    """Force a materially different discovery query after a zero-match find."""
+    """Avoid repeated empty queries only while their observed state is current."""
+    changed_at_step = 0
+    for event in getattr(state, "events", ()):
+        if not getattr(event, "executed", False) or getattr(event, "error", None):
+            continue
+        action, arguments = _event_arguments(event)
+        if action in {"filesystem.find", "playback.find_local"}:
+            continue
+        proposed = getattr(event, "proposed", {})
+        if proposed.get("kind") == "gui" and arguments.get("action") == "wait":
+            continue
+        # Saving/exporting can create the very file an earlier search missed.
+        # Other mutation and GUI events use the existing request-block lifecycle;
+        # they permit another observation, not a claim that the file now exists.
+        if event_changes_application_state(event) or (
+            proposed.get("kind") == "adapter"
+            and isinstance(action, str)
+            and action_is_save(action)
+        ):
+            changed_at_step = max(changed_at_step, getattr(event, "step", 0))
     zeroes = [
-        *zero_match_filesystem_find_events(state),
-        *zero_match_playback_find_events(state),
+        event
+        for event in (
+            *zero_match_filesystem_find_events(state),
+            *zero_match_playback_find_events(state),
+        )
+        if getattr(event, "step", 0) > changed_at_step
     ]
     if not zeroes:
         return tools

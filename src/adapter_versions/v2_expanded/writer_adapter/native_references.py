@@ -321,6 +321,11 @@ def insert_cross_reference(session: Any, params: dict[str, Any]) -> dict[str, An
                 "The reference displays the number of the paragraph covered by its source "
                 "bookmark. Check that this bookmark covers the content you want to cite. "
                 "The insertion destination can remain ordinary unnumbered text. "
+                "Use document.inspect paragraph_details[].numbering and index to find an "
+                "existing numbered paragraph. For paragraph.apply_numbering, source_index "
+                "is that existing numbered paragraph, and target_index is the cited "
+                "paragraph that needs numbering; they must differ. "
+                "text.find format supports character formatting, not paragraph numbering. "
                 "paragraph.apply_numbering can continue an observed list on the cited source; "
                 "bookmark.create can anchor that source for a later cross_reference.insert."
             ),

@@ -203,13 +203,84 @@ def _top_level_windows(application: Any) -> Iterator[Any]:
             yield node
 
 
+def _visible_dialogs(frame: Any, application: Any, atspi: Any) -> list[dict[str, Any]]:
+    """Read visible dialogs without treating them as the requested editor frame."""
+    dialogs: list[Any] = []
+    # Electron can expose a dialog inside its frame, or as a native modal
+    # sibling. Only inspect the matched application's dialogs; never select a
+    # different application's active window as a substitute for the editor.
+    for index, node in enumerate(_walk(frame)):
+        if index >= 2048:
+            break
+        if (
+            (_role(node) == "dialog" or (_role(node) == "alert" and _has_state(node, atspi, "modal")))
+            and _is_showing(node, atspi)
+        ):
+            dialogs.append(node)
+    for node in _top_level_windows(application):
+        if (
+            node is not frame
+            and not _has_state(frame, atspi, "active")
+            and _role(node) in {"dialog", "window", "frame"}
+            and _is_showing(node, atspi)
+            and (_role(node) == "dialog" or _has_state(node, atspi, "modal"))
+            and not any(node is found for found in dialogs)
+        ):
+            dialogs.append(node)
+    observations = []
+    for dialog in dialogs[:4]:
+        labels: list[str] = []
+        controls: list[str] = []
+        for index, node in enumerate(_walk(dialog)):
+            if index >= 256:
+                break
+            name = _name(node).strip()
+            if not name or not _is_showing(node, atspi):
+                continue
+            if name not in labels and len(labels) < 24:
+                labels.append(name[:1000])
+            if _role(node) in {"push-button", "button"} and name not in controls:
+                controls.append(name[:200])
+        observations.append({
+            "name": _name(dialog),
+            "role": _role(dialog),
+            "labels": labels,
+            "buttons": controls[:16],
+        })
+    return observations
+
+
 def active_window_node(window: WindowRecord, atspi: Any | None = None) -> Any:
     module = atspi or _load_atspi()
-    code_windows = [
-        node for app in _code_applications(module) for node in _top_level_windows(app)
+    applications = _code_applications(module)
+    window_applications = [
+        (node, app) for app in applications for node in _top_level_windows(app)
     ]
+    code_windows = [node for node, _app in window_applications]
     candidates = [node for node in code_windows if _name(node) == window.title]
     active = [node for node in code_windows if _has_state(node, module, "active")]
+    if len(candidates) == 1:
+        application = next(app for node, app in window_applications if node is candidates[0])
+        dialogs = _visible_dialogs(candidates[0], application, module)
+        if dialogs:
+            raise AdapterError(
+                "VSCODE_NOT_READY",
+                "the requested VS Code window exists, but a visible dialog needs attention",
+                {
+                    "window_id": window.window_id,
+                    "title": window.title,
+                    "visible_dialogs": dialogs,
+                    "recovery": "resolve_visible_dialog",
+                    "guidance": (
+                        "Keep the observed editor window_id. Inspect the dialog text and "
+                        "current screenshot, then choose the appropriate visible control "
+                        "using the GUI tools. Do not reopen the file or retry the editor "
+                        "command while the dialog remains open. Installing an extension "
+                        "does not itself dismiss an already open dialog."
+                    ),
+                },
+                422,
+            )
     if len(active) != 1 or len(candidates) != 1 or active[0] is not candidates[0]:
         raise AdapterError(
             "WINDOW_NOT_FOUND",
@@ -239,6 +310,8 @@ def wait_for_active_window(
             active_window_node(window)
             return window
         except AdapterError as exc:
+            if isinstance(exc.details, dict) and exc.details.get("recovery") == "resolve_visible_dialog":
+                raise
             last_error = exc
         if time.monotonic() >= deadline:
             assert last_error is not None
